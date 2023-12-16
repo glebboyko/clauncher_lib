@@ -26,7 +26,6 @@ include_directories(${CMAKE_SOURCE_DIR}/source)
 
 file(GLOB_RECURSE SOURCE_FILES "${CMAKE_SOURCE_DIR}/source/*.cpp")
 list(FILTER SOURCE_FILES EXCLUDE REGEX ".*/${CTCP_LIB}/*")
-message(WARNING "${SOURCE_FILES}")
 add_library(${PROJECT_NAME}
         SHARED
         ${SOURCE_FILES})
