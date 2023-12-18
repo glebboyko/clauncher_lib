@@ -24,11 +24,13 @@ include_directories(${c_tcp_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/source)
 
-file(GLOB_RECURSE SOURCE_FILES "${CMAKE_SOURCE_DIR}/source/*.cpp")
-list(FILTER SOURCE_FILES EXCLUDE REGEX ".*/${CTCP_LIB}/*")
 add_library(${PROJECT_NAME}
         SHARED
-        ${SOURCE_FILES})
+        source/clauncher-server.cpp source/clauncher-client.cpp
+        source/clauncher-supply.cpp)
 add_library(${PROJECT_NAME}_lib ALIAS ${PROJECT_NAME})
 
+add_executable(${PROJECT_NAME}_agent source/launch_agent.cpp)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CTCP_LIB})
+target_link_libraries(${PROJECT_NAME}_agent PRIVATE ${CTCP_LIB})
