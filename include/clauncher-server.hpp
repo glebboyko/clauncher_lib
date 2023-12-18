@@ -3,8 +3,10 @@
 #include <chrono>
 #include <list>
 #include <optional>
+#include <semaphore>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "clauncher-supply.hpp"
@@ -16,13 +18,17 @@ class LauncherServer {
  public:
   // structs //
   struct ProcessInfo {
-    std::string bin_name;
     std::list<std::string> args;
 
     ProcessConfig config;
     std::optional<int> pid;
 
     std::optional<std::chrono::time_point<std::chrono::system_clock>> last_run;
+  };
+  struct Stopper {
+    std::optional<std::chrono::milliseconds> time_to_stop;
+    std::optional<std::chrono::time_point<std::chrono::system_clock>> term_sent;
+    std::optional<std::binary_semaphore> term_status;
   };
 
   struct Client {
@@ -37,8 +43,8 @@ class LauncherServer {
   ~LauncherServer();
 
   // boot configuration //
-  void GetConfig() noexcept;
-  void SaveConfig() noexcept;
+  std::list<std::pair<std::string, ProcessInfo>> GetConfig() const noexcept;
+  void SaveConfig() const noexcept;
 
   // thread functions //
   void Accepter() noexcept;
@@ -47,9 +53,10 @@ class LauncherServer {
 
   void ClientCommunication(std::list<Client>::iterator* client) noexcept;
 
-  void RunProcess(int process_num) noexcept;
-  void LoadProcess(ProcessInfo&& process_info) noexcept;
-  bool StopProcess(int process_num) noexcept;
+  void RunProcess(std::string&& bin_name, ProcessInfo&& process) noexcept;
+  bool StopProcess(
+      std::string&& bin_name, bool wait_for_term = false,
+      std::optional<std::chrono::milliseconds> time_to_stop = {}) noexcept;
 
   bool ShouldReRun(const ProcessInfo& process_info) const noexcept;
   const ProcessInfo& GetProcess(const std::string& bin_name) noexcept;
@@ -72,7 +79,8 @@ class LauncherServer {
       &LauncherServer::ASetConfig};
 
   // variables //
-  std::vector<ProcessInfo> processes_;
+  std::unordered_map<std::string, ProcessInfo> processes_;
+  std::unordered_map<std::string, Stopper> processes_to_terminate_;
 
   TCP::TcpServer tcp_server_;
   std::list<Client> clients_;

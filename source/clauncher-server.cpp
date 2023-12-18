@@ -49,10 +49,8 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
   receiver_ = std::thread(&LauncherServer::Receiver, this);
   process_ctrl_ = std::thread(&LauncherServer::ProcessCtrl, this);
 
-  GetConfig();
-
-  for (int i = 0; i < processes_.size(); ++i) {
-    RunProcess(i);
+  for (auto&& [bin_name, process] : GetConfig()) {
+    RunProcess(std::move(bin_name), std::move(process));
   }
 }
 
@@ -64,7 +62,7 @@ LauncherServer::~LauncherServer() {
   tcp_server_.CloseListener();
   accepter_.join();
 
-  for (auto& process : processes_) {
+  for (auto& [bin_name, process] : processes_) {
     if (process.pid.has_value()) {
       kill(process.pid.value(), SIGTERM);
     }
@@ -83,21 +81,23 @@ LauncherServer::~LauncherServer() {
 }
 
 /*---------------------------- boot configuration ----------------------------*/
-void LauncherServer::GetConfig() noexcept {
-  processes_.clear();
+std::list<std::pair<std::string, LauncherServer::ProcessInfo>>
+LauncherServer::GetConfig() const noexcept {
+  std::list<std::pair<std::string, ProcessInfo>> processes;
 
   std::ifstream config(config_file_);
   if (!config.is_open()) {
-    return;
+    return processes;
   }
   if (config.eof()) {
     config.close();
-    return;
+    return processes;
   }
 
   do {
+    std::string bin_name;
     ProcessInfo info;
-    config >> info.bin_name;
+    config >> bin_name;
 
     int arg_num;
     config >> arg_num;
@@ -110,23 +110,24 @@ void LauncherServer::GetConfig() noexcept {
     info.config.launch_on_boot = true;
     config >> info.config.term_rerun;
 
-    processes_.push_back(std::move(info));
+    processes.push_back({std::move(bin_name), std::move(info)});
   } while (!config.eof());
 
   config.close();
+  return processes;
 }
-void LauncherServer::SaveConfig() noexcept {
+void LauncherServer::SaveConfig() const noexcept {
   std::ofstream config(config_file_);
   if (!config.is_open()) {
     return;
   }
 
-  for (const auto& process : processes_) {
+  for (const auto& [bin_name, process] : processes_) {
     if (!process.config.launch_on_boot) {
       continue;
     }
 
-    config << process.bin_name << "\t";
+    config << bin_name << "\t";
 
     config << process.args.size() << "\t";
     for (const auto& arg : process.args) {
@@ -152,14 +153,15 @@ void LauncherServer::Accepter() noexcept {
         continue;
       }
       if (send_from == SenderStatus::Agent) {
-        int process_num, nd_arg;
-        tcp_server_.Receive(connection.value(), process_num, nd_arg);
-        if (processes_[process_num].pid.has_value()) {
-          processes_[process_num].pid = {};
-          processes_[process_num].last_run = std::chrono::system_clock::now();
+        std::string process_name;
+        int nd_arg;
+        tcp_server_.Receive(connection.value(), process_name, nd_arg);
+        if (processes_[process_name].pid.has_value()) {
+          processes_[process_name].pid = {};
+          processes_[process_name].last_run = std::chrono::system_clock::now();
         } else {
-          processes_[process_num].last_run = {};
-          processes_[process_num].pid = nd_arg;
+          processes_[process_name].last_run = {};
+          processes_[process_name].pid = nd_arg;
         }
       }
       tcp_server_.CloseConnection(connection.value());
