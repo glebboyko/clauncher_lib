@@ -1,7 +1,7 @@
 #include "clauncher-supply.hpp"
 
-namespace CLGR {
+namespace LNCR {
 
 
 
-}  // namespace CLGR
+}  // namespace LNCR

@@ -4,7 +4,7 @@
 #include "clauncher-supply.hpp"
 
 int main(int argc, char** argv) {
-  if (argc <= 4) {
+  if (argc <= 3) {
     exit(1);
   }
 
@@ -13,18 +13,18 @@ int main(int argc, char** argv) {
 
   try {
     TCP::TcpClient tcp_client(0, port, "127.0.0.1");
-    tcp_client.Send(CLGR::Agent);
-    tcp_client.Send(argv[2], getpid());
+    tcp_client.Send(LNCR::Agent);
+    tcp_client.Send(argv[2], getpid(), 0);
   } catch (...) {
     exit(2);
   }
 
-  execv(argv[3], &(argv[4]));
+  execv(argv[2], &(argv[3]));
 
   try {
     TCP::TcpClient tcp_client(0, port, "127.0.0.1");
-    tcp_client.Send(CLGR::Agent);
-    tcp_client.Send(argv[2], errno);
+    tcp_client.Send(LNCR::Agent);
+    tcp_client.Send(argv[2], getpid(), errno);
   } catch (...) {
     exit(3);
   }

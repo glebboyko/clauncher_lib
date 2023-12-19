@@ -2,33 +2,36 @@
 
 #include <chrono>
 #include <list>
+#include <map>
+#include <mutex>
 #include <optional>
 #include <semaphore>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <vector>
 
 #include "clauncher-supply.hpp"
 #include "tcp-server.hpp"
 
-namespace CLGR {
+namespace LNCR {
 
 class LauncherServer {
  public:
   // structs //
   struct ProcessInfo {
-    std::list<std::string> args;
-
     ProcessConfig config;
-    std::optional<int> pid;
-
-    std::optional<std::chrono::time_point<std::chrono::system_clock>> last_run;
+    std::optional<int> pid = {};
+  };
+  struct Runner {
+    ProcessInfo info;
+    std::optional<std::chrono::time_point<std::chrono::system_clock>> last_run =
+        {};
+    std::optional<std::binary_semaphore> run_status = {};
   };
   struct Stopper {
-    std::optional<std::chrono::milliseconds> time_to_stop;
-    std::optional<std::chrono::time_point<std::chrono::system_clock>> term_sent;
-    std::optional<std::binary_semaphore> term_status;
+    std::optional<std::chrono::time_point<std::chrono::system_clock>>
+        term_sent = {};
+    std::optional<std::binary_semaphore> term_status = {};
   };
 
   struct Client {
@@ -43,7 +46,7 @@ class LauncherServer {
   ~LauncherServer();
 
   // boot configuration //
-  std::list<std::pair<std::string, ProcessInfo>> GetConfig() const noexcept;
+  std::list<std::pair<std::string, ProcessConfig>> GetConfig() const noexcept;
   void SaveConfig() const noexcept;
 
   // thread functions //
@@ -53,13 +56,10 @@ class LauncherServer {
 
   void ClientCommunication(std::list<Client>::iterator* client) noexcept;
 
-  void RunProcess(std::string&& bin_name, ProcessInfo&& process) noexcept;
-  bool StopProcess(
-      std::string&& bin_name, bool wait_for_term = false,
-      std::optional<std::chrono::milliseconds> time_to_stop = {}) noexcept;
-
-  bool ShouldReRun(const ProcessInfo& process_info) const noexcept;
-  const ProcessInfo& GetProcess(const std::string& bin_name) noexcept;
+  bool RunProcess(std::string&& bin_name, ProcessConfig&& process,
+                  bool wait_for_run = false) noexcept;
+  bool StopProcess(const std::string& bin_name,
+                   bool wait_for_term = false) noexcept;
 
   // atomic operations //
   void ALoad(TCP::TcpServer::ClientConnection client);
@@ -70,6 +70,13 @@ class LauncherServer {
   void AGetConfig(TCP::TcpServer::ClientConnection client);
   void ASetConfig(TCP::TcpServer::ClientConnection client);
 
+  // secondary functions //
+  bool SendRun(const std::string& name, const ProcessConfig& config) noexcept;
+  void PrCtrlToRun() noexcept;
+  void PrCtrlToTerm() noexcept;
+  void PrCtrlMain() noexcept;
+  bool IsPidAvailable(int pid) const noexcept;
+
   static const int kNumAMethods = 7;
   typedef void (LauncherServer::*MethodPtr)(TCP::TcpServer::ClientConnection);
   MethodPtr method_ptr[kNumAMethods] = {
@@ -79,8 +86,12 @@ class LauncherServer {
       &LauncherServer::ASetConfig};
 
   // variables //
-  std::unordered_map<std::string, ProcessInfo> processes_;
-  std::unordered_map<std::string, Stopper> processes_to_terminate_;
+  std::map<std::string, ProcessInfo> processes_;
+
+  std::map<std::string, Runner> processes_to_run_;
+  std::mutex pr_to_run_erasing_;
+
+  std::map<std::string, Stopper> processes_to_terminate_;
 
   TCP::TcpServer tcp_server_;
   std::list<Client> clients_;
@@ -92,9 +103,10 @@ class LauncherServer {
   std::thread accepter_;
   std::thread receiver_;
   std::thread process_ctrl_;
+
   bool is_active_ = true;
 
   logging_foo logger_;
 };
 
-}  // namespace CLGR
+}  // namespace LNCR
