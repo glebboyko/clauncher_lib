@@ -47,6 +47,7 @@ class LauncherServer {
                  const std::string& agent_binary, logging_foo = LoggerCap);
   ~LauncherServer();
 
+ private:
   // boot configuration //
   void GetConfig() noexcept;
   void SaveConfig() const noexcept;
