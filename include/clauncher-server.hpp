@@ -31,6 +31,8 @@ class LauncherServer {
   struct Stopper {
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         term_sent = {};
+
+    bool is_ordinary = false;
     std::optional<std::binary_semaphore> term_status = {};
   };
 

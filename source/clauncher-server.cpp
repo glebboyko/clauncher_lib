@@ -79,6 +79,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
                  .has_value()) {  // no after checking required
           processes_.erase(main_iter);
           if (deleter.term_status.has_value()) {
+            deleter.is_ordinary = true;
             deleter.term_status.value().release();
           }
         } else {  // after checking required
@@ -90,6 +91,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
         if (!IsPidAvailable(main_iter->second.pid)) {  // is terminated
           processes_.erase(main_iter);
           if (deleter.term_status.has_value()) {
+            deleter.is_ordinary = true;
             deleter.term_status.value().release();
           }
         } else {  // is not terminated
@@ -98,6 +100,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
             kill(main_iter->second.pid, SIGKILL);
             processes_.erase(main_iter);
             if (deleter.term_status.has_value()) {
+              deleter.is_ordinary = false;
               deleter.term_status.value().release();
             }
           }  // else skip
