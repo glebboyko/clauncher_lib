@@ -1,9 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <list>
 #include <string>
-
-#include "tcp-server.hpp"
 
 namespace LNCR {
 
