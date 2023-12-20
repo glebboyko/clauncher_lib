@@ -4,8 +4,8 @@ project(clauncher)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS -pthread)
 
-get_filename_component(DIR_INCLUDE include ABSOLUTE DIRECTORY)
-set(${PROJECT_NAME}_DIR ${DIR_INCLUDE} PARENT_SCOPE)
+get_filename_component(DIR_INCLUDE . ABSOLUTE DIRECTORY)
+set(${PROJECT_NAME}_DIR ${DIR_INCLUDE}/include PARENT_SCOPE)
 
 set(CTCP_LIB "c_tcp_lib")
 file(GLOB LIB_CONT "source/${CTCP_LIB}/*")
@@ -13,9 +13,9 @@ list(LENGTH LIB_CONT LIB_LENGTH)
 
 set(MY_GIT_LINK "https://github.com/glebboyko")
 if (LIB_LENGTH EQUAL 0)
-    execute_process(COMMAND git clone "${MY_GIT_LINK}/${CTCP_LIB}.git" "source/${CTCP_LIB}")
+    execute_process(COMMAND git clone "${MY_GIT_LINK}/${CTCP_LIB}.git" "${DIR_INCLUDE}/source/${CTCP_LIB}")
 else ()
-    execute_process(COMMAND git -C "source/${CTCP_LIB}" pull)
+    execute_process(COMMAND git -C "${DIR_INCLUDE}/source/${CTCP_LIB}" pull)
 endif ()
 
 add_subdirectory("source/${CTCP_LIB}/cpp")
