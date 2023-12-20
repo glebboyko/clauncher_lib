@@ -203,6 +203,21 @@ bool LauncherServer::IsPidAvailable(int pid) const noexcept {
   return kill(pid, 0) == 0;
 }
 
+std::optional<int> LauncherServer::GetPid(
+    const std::string& bin_name) noexcept {
+  pr_erasing_.lock();
+
+  if (!processes_.contains(bin_name)) {
+    pr_erasing_.unlock();
+    return {};
+  }
+  int pid = processes_[bin_name].pid;
+
+  pr_erasing_.unlock();
+
+  return pid;
+}
+
 /*------------------------- constructor / destructor -------------------------*/
 LauncherServer::LauncherServer(int port, const std::string& config_file,
                                const std::string& agent_binary,
