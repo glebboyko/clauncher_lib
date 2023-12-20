@@ -4,7 +4,8 @@
 #include <unistd.h>
 
 #include <fstream>
-#include <memory>
+
+#include "clauncher-server-impl.hpp"
 
 namespace LNCR {
 
@@ -37,7 +38,7 @@ auto SaveListErase(std::list<T>& list, decltype(list.begin()) iter) {
   return iter;
 }
 
-void LauncherServer::PrCtrlToRun() noexcept {
+void LauncherServer::Implementation::PrCtrlToRun() noexcept {
   pr_to_run_erasing_.lock();
   for (auto iter = processes_to_run_.begin();
        iter != processes_to_run_.end();) {
@@ -65,7 +66,7 @@ void LauncherServer::PrCtrlToRun() noexcept {
   }
   pr_to_run_erasing_.unlock();
 }
-void LauncherServer::PrCtrlToTerm() noexcept {
+void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
   for (auto iter = processes_to_terminate_.begin();
        iter != processes_to_terminate_.end();) {
     auto& [bin_name, deleter] = *iter;
@@ -112,7 +113,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
     }
   }
 }
-void LauncherServer::PrCtrlMain() noexcept {
+void LauncherServer::Implementation::PrCtrlMain() noexcept {
   pr_erasing_.lock();
   for (auto iter = processes_.begin(); iter != processes_.end();) {
     if (!processes_to_terminate_.contains(iter->first)) {
@@ -132,9 +133,9 @@ void LauncherServer::PrCtrlMain() noexcept {
   pr_erasing_.unlock();
 }
 
-bool LauncherServer::RunProcess(std::string&& bin_name,
-                                LNCR::ProcessConfig&& process,
-                                bool wait_for_run) noexcept {
+bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
+                                                LNCR::ProcessConfig&& process,
+                                                bool wait_for_run) noexcept {
   if (processes_to_run_.contains(bin_name) || processes_.contains(bin_name)) {
     return false;
   }
@@ -159,8 +160,8 @@ bool LauncherServer::RunProcess(std::string&& bin_name,
   }
   return true;
 }
-bool LauncherServer::StopProcess(const std::string& bin_name,
-                                 bool wait_for_term) noexcept {
+bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
+                                                 bool wait_for_term) noexcept {
   if (load_config_.contains(bin_name)) {
     load_config_.erase(bin_name);
   }
@@ -189,8 +190,8 @@ bool LauncherServer::StopProcess(const std::string& bin_name,
   return result;
 }
 
-void LauncherServer::SendRun(const std::string& name,
-                             const LNCR::ProcessConfig& config) noexcept {
+void LauncherServer::Implementation::SendRun(
+    const std::string& name, const LNCR::ProcessConfig& config) noexcept {
   std::string launch_conf =
       agent_binary_ + " " + std::to_string(port_) + " " + name + " ";
   for (const auto& arg : config.args) {
@@ -200,11 +201,11 @@ void LauncherServer::SendRun(const std::string& name,
 
   system(launch_conf.c_str());
 }
-bool LauncherServer::IsPidAvailable(int pid) const noexcept {
+bool LauncherServer::Implementation::IsPidAvailable(int pid) const noexcept {
   return kill(pid, 0) == 0;
 }
 
-std::optional<int> LauncherServer::GetPid(
+std::optional<int> LauncherServer::Implementation::GetPid(
     const std::string& bin_name) noexcept {
   pr_erasing_.lock();
 
@@ -222,50 +223,55 @@ std::optional<int> LauncherServer::GetPid(
 /*------------------------- constructor / destructor -------------------------*/
 LauncherServer::LauncherServer(int port, const std::string& config_file,
                                const std::string& agent_binary,
-                               logging_foo logger)
-    : port_(port),
-      tcp_server_(0, port, logger, kMaxQueue),
-      config_file_(config_file),
-      agent_binary_(agent_binary),
-      logger_(logger) {
-  accepter_ = std::thread(&LauncherServer::Accepter, this);
-  receiver_ = std::thread(&LauncherServer::Receiver, this);
-  process_ctrl_ = std::thread(&LauncherServer::ProcessCtrl, this);
+                               logging_foo logger) {
+  implementation_ = std::unique_ptr<Implementation>(new Implementation{
+      .tcp_server_ = TCP::TcpServer(0, port, logger, kMaxQueue),
+      .agent_binary_ = agent_binary,
+      .config_file_ = config_file,
+      .port_ = port,
+      .logger_ = logger});
+  implementation_->accepter_ =
+      std::thread(&Implementation::Accepter, implementation_.get());
+  implementation_->receiver_ =
+      std::thread(&Implementation::Receiver, implementation_.get());
+  implementation_->process_ctrl_ =
+      std::thread(&Implementation::ProcessCtrl, implementation_.get());
 
-  GetConfig();
-  for (const auto& [bin_name, process] : load_config_) {
+  implementation_->GetConfig();
+  for (const auto& [bin_name, process] : implementation_->load_config_) {
     auto c_bin_name = bin_name;
     auto c_process = process;
-    RunProcess(std::move(c_bin_name), std::move(c_process));
+    implementation_->RunProcess(std::move(c_bin_name), std::move(c_process));
   }
 }
 
 LauncherServer::~LauncherServer() {
-  is_active_ = false;
-  receiver_.join();
+  implementation_->is_active_ = false;
+  implementation_->receiver_.join();
 
-  tcp_server_.CloseListener();
-  accepter_.join();
+  implementation_->tcp_server_.CloseListener();
+  implementation_->accepter_.join();
 
-  for (auto& [connection, curr_communication, is_running] : clients_) {
+  for (auto& [connection, curr_communication, is_running] :
+       implementation_->clients_) {
     if (connection.has_value()) {
-      tcp_server_.CloseConnection(connection.value());
+      implementation_->tcp_server_.CloseConnection(connection.value());
       if (curr_communication.has_value()) {
         curr_communication->join();
       }
     }
   }
 
-  SaveConfig();
+  implementation_->SaveConfig();
 
-  for (const auto& [bin_name, process] : processes_) {
-    StopProcess(bin_name, false);
+  for (const auto& [bin_name, process] : implementation_->processes_) {
+    implementation_->StopProcess(bin_name, false);
   }
-  process_ctrl_.join();
+  implementation_->process_ctrl_.join();
 }
 
 /*---------------------------- boot configuration ----------------------------*/
-void LauncherServer::GetConfig() noexcept {
+void LauncherServer::Implementation::GetConfig() noexcept {
   std::ifstream config(config_file_);
   if (!config.is_open()) {
     return;
@@ -302,7 +308,7 @@ void LauncherServer::GetConfig() noexcept {
 
   config.close();
 }
-void LauncherServer::SaveConfig() const noexcept {
+void LauncherServer::Implementation::SaveConfig() const noexcept {
   std::ofstream config(config_file_);
   if (!config.is_open()) {
     return;
@@ -331,7 +337,7 @@ void LauncherServer::SaveConfig() const noexcept {
 }
 
 /*----------------------------- thread functions -----------------------------*/
-void LauncherServer::Accepter() noexcept {
+void LauncherServer::Implementation::Accepter() noexcept {
   while (is_active_) {
     TCP::TcpServer::ClientConnection* connection;
     try {
@@ -399,7 +405,7 @@ void LauncherServer::Accepter() noexcept {
     }
   }
 }
-void LauncherServer::Receiver() noexcept {
+void LauncherServer::Implementation::Receiver() noexcept {
   while (is_active_) {
     for (auto iter = clients_.begin(); is_active_ && iter != clients_.end();) {
       // terminating communication
@@ -418,8 +424,8 @@ void LauncherServer::Receiver() noexcept {
       try {
         if (tcp_server_.IsAvailable(iter->connection.value())) {
           iter->curr_communication =
-              std::thread(&LauncherServer::ClientCommunication, this,
-                          new decltype(iter)(iter));
+              std::thread(&LauncherServer::Implementation::ClientCommunication,
+                          this, new decltype(iter)(iter));
           iter->is_running = true;
         }
       } catch (TCP::TcpException& tcp_exception) {
@@ -435,7 +441,7 @@ void LauncherServer::Receiver() noexcept {
     std::this_thread::sleep_for(kLoopWait);
   }
 }
-void LauncherServer::ProcessCtrl() noexcept {
+void LauncherServer::Implementation::ProcessCtrl() noexcept {
   while (is_active_ || !processes_.empty()) {
     PrCtrlToRun();
     PrCtrlToTerm();
@@ -443,7 +449,7 @@ void LauncherServer::ProcessCtrl() noexcept {
   }
 }
 
-void LauncherServer::ClientCommunication(
+void LauncherServer::Implementation::ClientCommunication(
     std::list<Client>::iterator* client) noexcept {
   try {
     int command;
@@ -459,7 +465,8 @@ void LauncherServer::ClientCommunication(
 }
 
 /*---------------------------- atomic operations -----------------------------*/
-void LauncherServer::ALoad(TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::ALoad(
+    TCP::TcpServer::ClientConnection client) {
   std::string bin_name;
   ProcessConfig config;
   std::string tmp_args;
@@ -478,7 +485,8 @@ void LauncherServer::ALoad(TCP::TcpServer::ClientConnection client) {
   tcp_server_.Send(client, result);
 }
 
-void LauncherServer::AStop(TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::AStop(
+    TCP::TcpServer::ClientConnection client) {
   std::string bin_name;
   bool should_wait;
   tcp_server_.Receive(client, bin_name, should_wait);
@@ -487,7 +495,8 @@ void LauncherServer::AStop(TCP::TcpServer::ClientConnection client) {
   tcp_server_.Send(client, result);
 }
 
-void LauncherServer::ARerun(TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::ARerun(
+    TCP::TcpServer::ClientConnection client) {
   std::string bin_name;
   bool should_wait;
   tcp_server_.Receive(client, bin_name, should_wait);
@@ -507,7 +516,8 @@ void LauncherServer::ARerun(TCP::TcpServer::ClientConnection client) {
   tcp_server_.Send(client, result);
 }
 
-void LauncherServer::AIsRunning(TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::AIsRunning(
+    TCP::TcpServer::ClientConnection client) {
   std::string bin_name;
   tcp_server_.Receive(client, bin_name);
 
@@ -515,7 +525,8 @@ void LauncherServer::AIsRunning(TCP::TcpServer::ClientConnection client) {
   tcp_server_.Send(client, result);
 }
 
-void LauncherServer::AGetPid(TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::AGetPid(
+    TCP::TcpServer::ClientConnection client) {
   std::string bin_name;
   tcp_server_.Receive(client, bin_name);
 
