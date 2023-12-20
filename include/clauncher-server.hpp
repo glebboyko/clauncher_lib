@@ -113,4 +113,7 @@ class LauncherServer {
   logging_foo logger_;
 };
 
+void LauncherRunner(int port, const std::string& config_file,
+                    const std::string& agent_binary, logging_foo = LoggerCap) noexcept;
+
 }  // namespace LNCR
