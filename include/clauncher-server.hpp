@@ -20,7 +20,7 @@ class LauncherServer {
   // structs //
   struct ProcessInfo {
     ProcessConfig config;
-    std::optional<int> pid = {};
+    int pid = 0;
   };
   struct Runner {
     ProcessInfo info;

@@ -41,7 +41,7 @@ void LauncherServer::PrCtrlToRun() noexcept {
   for (auto iter = processes_to_run_.begin();
        iter != processes_to_run_.end();) {
     auto& [bin_name, runner] = *iter;
-    if (runner.info.pid.has_value()) {    // process has already sent config
+    if (runner.info.pid != 0) {    // process has already sent config
       if (runner.last_run.has_value()) {  // process has not been moved yet
         processes_.insert({bin_name, runner.info});
         runner.last_run = {};  // moved flag
@@ -57,7 +57,7 @@ void LauncherServer::PrCtrlToRun() noexcept {
         runner.last_run = {};  // setting rerun flag
       }
     }
-    if (!runner.info.pid.has_value() &&
+    if (runner.info.pid == 0 &&
         !runner.last_run.has_value()) {  // run flag set
       if (SendRun(bin_name, runner.info.config)) {
         runner.last_run = std::chrono::system_clock::now();
@@ -74,7 +74,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
     if (processes_.contains(bin_name)) {  // requires to terminate
       auto main_iter = processes_.find(bin_name);
       if (!deleter.term_sent.has_value()) {  // ordinary termination
-        kill(main_iter->second.pid.value(), SIGTERM);
+        kill(main_iter->second.pid, SIGTERM);
         if (!main_iter->second.config.time_to_stop
                  .has_value()) {  // no after checking required
           processes_.erase(main_iter);
@@ -87,7 +87,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
       }
 
       if (deleter.term_sent.has_value()) {  // termination checker
-        if (!IsPidAvailable(main_iter->second.pid.value())) {  // is terminated
+        if (!IsPidAvailable(main_iter->second.pid)) {  // is terminated
           processes_.erase(main_iter);
           if (deleter.term_status.has_value()) {
             deleter.term_status.value().release();
@@ -95,7 +95,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
         } else {  // is not terminated
           if (std::chrono::system_clock::now() - deleter.term_sent.value() >
               main_iter->second.config.time_to_stop) {  // is timeout
-            kill(main_iter->second.pid.value(), SIGKILL);
+            kill(main_iter->second.pid, SIGKILL);
             processes_.erase(main_iter);
             if (deleter.term_status.has_value()) {
               deleter.term_status.value().release();
@@ -114,7 +114,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
 void LauncherServer::PrCtrlMain() noexcept {
   for (auto iter = processes_.begin(); iter != processes_.end();) {
     if (!processes_to_terminate_.contains(iter->first)) {
-      if (!IsPidAvailable(iter->second.pid.value())) {
+      if (!IsPidAvailable(iter->second.pid)) {
         if (iter->second.config.term_rerun) {
           auto bin_name = iter->first;
           auto config = std::move(iter->second.config);
