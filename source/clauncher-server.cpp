@@ -142,7 +142,8 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
   receiver_ = std::thread(&LauncherServer::Receiver, this);
   process_ctrl_ = std::thread(&LauncherServer::ProcessCtrl, this);
 
-  for (auto&& [bin_name, process] : GetConfig()) {
+  GetConfig();
+  for (auto&& [bin_name, process] : load_config_) {
     RunProcess(std::move(bin_name), std::move(process));
   }
 }
@@ -172,17 +173,14 @@ LauncherServer::~LauncherServer() {
 }
 
 /*---------------------------- boot configuration ----------------------------*/
-std::list<std::pair<std::string, ProcessConfig>> LauncherServer::GetConfig()
-    const noexcept {
-  std::list<std::pair<std::string, ProcessConfig>> processes;
-
+void LauncherServer::GetConfig() noexcept {
   std::ifstream config(config_file_);
   if (!config.is_open()) {
-    return processes;
+    return;
   }
   if (config.eof()) {
     config.close();
-    return processes;
+    return;
   }
 
   do {
@@ -207,11 +205,10 @@ std::list<std::pair<std::string, ProcessConfig>> LauncherServer::GetConfig()
       info.time_to_stop = std::chrono::milliseconds(delay);
     }
 
-    processes.push_back({std::move(bin_name), std::move(info)});
+    load_config_.push_back({std::move(bin_name), std::move(info)});
   } while (!config.eof());
 
   config.close();
-  return processes;
 }
 void LauncherServer::SaveConfig() const noexcept {
   std::ofstream config(config_file_);
@@ -219,21 +216,21 @@ void LauncherServer::SaveConfig() const noexcept {
     return;
   }
 
-  for (const auto& [bin_name, process] : processes_) {
-    if (!process.config.launch_on_boot) {
+  for (const auto& [bin_name, process] : load_config_) {
+    if (!process.launch_on_boot) {
       continue;
     }
 
     config << bin_name << "\t";
 
-    config << process.config.args.size() << "\t";
-    for (const auto& arg : process.config.args) {
+    config << process.args.size() << "\t";
+    for (const auto& arg : process.args) {
       config << arg << "\t";
     }
 
-    config << process.config.term_rerun << "\t";
-    config << (process.config.time_to_stop.has_value()
-                   ? process.config.time_to_stop.value().count()
+    config << process.term_rerun << "\t";
+    config << (process.time_to_stop.has_value()
+                   ? process.time_to_stop.value().count()
                    : 0)
            << "\n";
   }

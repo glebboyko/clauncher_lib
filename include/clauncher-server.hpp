@@ -46,7 +46,7 @@ class LauncherServer {
   ~LauncherServer();
 
   // boot configuration //
-  std::list<std::pair<std::string, ProcessConfig>> GetConfig() const noexcept;
+  void GetConfig() noexcept;
   void SaveConfig() const noexcept;
 
   // thread functions //
@@ -86,6 +86,7 @@ class LauncherServer {
       &LauncherServer::ASetConfig};
 
   // variables //
+  std::list<std::pair<std::string, ProcessConfig>> load_config_;
   std::map<std::string, ProcessInfo> processes_;
 
   std::map<std::string, Runner> processes_to_run_;
