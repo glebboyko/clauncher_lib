@@ -146,18 +146,45 @@ bool LauncherServer::RunProcess(std::string&& bin_name,
 
   std::binary_semaphore* semaphore =
       wait_for_run ? new std::binary_semaphore(0) : nullptr;
-  Runner runner = {.info = {.config = std::move(process)}, .run_status = semaphore};
-  auto inserted = processes_to_run_.insert({std::move(bin_name), std::move(runner)});
+  Runner runner = {.info = {.config = std::move(process)},
+                   .run_status = semaphore};
+  auto inserted =
+      processes_to_run_.insert({std::move(bin_name), std::move(runner)});
 
   if (wait_for_run) {
     semaphore->acquire();
-    delete semaphore;
     inserted.first->second.run_status = nullptr;
+    delete semaphore;
   }
   return true;
 }
-bool LauncherServer::StopProcess(const std::string& bin_name, bool wait_for_term) noexcept {
+bool LauncherServer::StopProcess(const std::string& bin_name,
+                                 bool wait_for_term) noexcept {
+  if (load_config_.contains(bin_name)) {
+    load_config_.erase(bin_name);
+  }
 
+  std::binary_semaphore* semaphore =
+      wait_for_term ? new std::binary_semaphore(0) : nullptr;
+  Stopper stopper = {.term_status = semaphore};
+
+  auto iter = processes_to_terminate_.insert({std::move(bin_name), std::move(stopper)});
+  if (!iter.second) {
+    if (semaphore != nullptr) {
+      delete semaphore;
+    }
+    return true;
+  }
+
+  bool result = true;
+
+  if (wait_for_term) {
+    semaphore->acquire();
+    result = iter.first->second.is_ordinary;
+    iter.first->second.term_status = nullptr;
+    delete semaphore;
+  }
+  return result;
 }
 
 /*------------------------- constructor / destructor -------------------------*/
@@ -175,7 +202,8 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
 
   GetConfig();
   for (const auto& [bin_name, process] : load_config_) {
-    auto c_bin_name = bin_name; auto c_process = process;
+    auto c_bin_name = bin_name;
+    auto c_process = process;
     RunProcess(std::move(c_bin_name), std::move(c_process));
   }
 }
