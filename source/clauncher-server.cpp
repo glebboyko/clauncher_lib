@@ -58,9 +58,7 @@ void LauncherServer::PrCtrlToRun() noexcept {
       }
     }
     if (runner.info.pid == 0 && !runner.last_run.has_value()) {  // run flag set
-      if (SendRun(bin_name, runner.info.config)) {
-        runner.last_run = std::chrono::system_clock::now();
-      }
+      runner.last_run = std::chrono::system_clock::now();
     }
     ++iter;
   }
@@ -168,7 +166,8 @@ bool LauncherServer::StopProcess(const std::string& bin_name,
       wait_for_term ? new std::binary_semaphore(0) : nullptr;
   Stopper stopper = {.term_status = semaphore};
 
-  auto iter = processes_to_terminate_.insert({std::move(bin_name), std::move(stopper)});
+  auto iter =
+      processes_to_terminate_.insert({std::move(bin_name), std::move(stopper)});
   if (!iter.second) {
     if (semaphore != nullptr) {
       delete semaphore;
@@ -185,6 +184,21 @@ bool LauncherServer::StopProcess(const std::string& bin_name,
     delete semaphore;
   }
   return result;
+}
+
+void LauncherServer::SendRun(const std::string& name,
+                             const LNCR::ProcessConfig& config) noexcept {
+  std::string launch_conf =
+      agent_binary_ + " " + std::to_string(port_) + " " + name + " ";
+  for (const auto& arg : config.args) {
+    launch_conf += arg + " ";
+  }
+  launch_conf += "&";
+
+  system(launch_conf.c_str());
+}
+bool LauncherServer::IsPidAvailable(int pid) const noexcept {
+  return kill(pid, 0) == 0;
 }
 
 /*------------------------- constructor / destructor -------------------------*/

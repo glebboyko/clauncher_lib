@@ -73,7 +73,7 @@ class LauncherServer {
   void ASetConfig(TCP::TcpServer::ClientConnection client);
 
   // secondary functions //
-  bool SendRun(const std::string& name, const ProcessConfig& config) noexcept;
+  void SendRun(const std::string& name, const ProcessConfig& config) noexcept;
   void PrCtrlToRun() noexcept;
   void PrCtrlToTerm() noexcept;
   void PrCtrlMain() noexcept;
