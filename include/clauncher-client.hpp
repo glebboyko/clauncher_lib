@@ -1,10 +1,10 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 
 #include "clauncher-supply.hpp"
-#include "tcp-client.hpp"
 
 namespace LNCR {
 
@@ -21,10 +21,9 @@ class LauncherClient {
   std::optional<int> GetProcessPid(const std::string& bin_name);
 
  private:
-  void CheckTcpClient();
-  int port_;
-  logging_foo logger_;
-  std::optional<TCP::TcpClient> tcp_client_;
+  struct Implementation;
+
+  std::unique_ptr<Implementation> implementation_;
 };
 
 }  // namespace LNCR
