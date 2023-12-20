@@ -112,6 +112,7 @@ void LauncherServer::PrCtrlToTerm() noexcept {
   }
 }
 void LauncherServer::PrCtrlMain() noexcept {
+  pr_erasing_.lock();
   for (auto iter = processes_.begin(); iter != processes_.end();) {
     if (!processes_to_terminate_.contains(iter->first)) {
       if (!IsPidAvailable(iter->second.pid)) {
@@ -127,6 +128,7 @@ void LauncherServer::PrCtrlMain() noexcept {
     }
     ++iter;
   }
+  pr_erasing_.unlock();
 }
 
 bool LauncherServer::RunProcess(std::string&& bin_name,
@@ -440,6 +442,68 @@ void LauncherServer::ClientCommunication(
   delete client;
 }
 
-/*---------------------------- checking functions ----------------------------*/
+/*---------------------------- atomic operations -----------------------------*/
+void LauncherServer::ALoad(TCP::TcpServer::ClientConnection client) {
+  std::string bin_name;
+  ProcessConfig config;
+  std::string tmp_args;
+  int tmp_time_to_stop;
+  bool should_wait;
+  tcp_server_.Receive(client, bin_name, tmp_args, config.launch_on_boot,
+                      config.term_rerun, config.term_rerun, tmp_time_to_stop,
+                      should_wait);
 
+  config.args = Split(tmp_args, ';');
+  if (tmp_time_to_stop != 0) {
+    config.time_to_stop = std::chrono::milliseconds(tmp_time_to_stop);
+  }
+
+  bool result = RunProcess(std::move(bin_name), std::move(config), should_wait);
+  tcp_server_.Send(client, result);
+}
+
+void LauncherServer::AStop(TCP::TcpServer::ClientConnection client) {
+  std::string bin_name;
+  bool should_wait;
+  tcp_server_.Receive(client, bin_name, should_wait);
+
+  bool result = StopProcess(bin_name, should_wait);
+  tcp_server_.Send(client, result);
+}
+
+void LauncherServer::ARerun(TCP::TcpServer::ClientConnection client) {
+  std::string bin_name;
+  bool should_wait;
+  tcp_server_.Receive(client, bin_name, should_wait);
+
+  pr_erasing_.lock();
+  if (!processes_.contains(bin_name)) {
+    pr_erasing_.unlock();
+
+    tcp_server_.Send(client, false);
+    return;
+  }
+  ProcessConfig config = processes_[bin_name].config;
+  pr_erasing_.unlock();
+
+  StopProcess(bin_name, true);
+  bool result = RunProcess(std::move(bin_name), std::move(config), should_wait);
+  tcp_server_.Send(client, result);
+}
+
+void LauncherServer::AIsRunning(TCP::TcpServer::ClientConnection client) {
+  std::string bin_name;
+  tcp_server_.Receive(client, bin_name);
+
+  bool result = GetPid(bin_name).has_value();
+  tcp_server_.Send(client, result);
+}
+
+void LauncherServer::AGetPid(TCP::TcpServer::ClientConnection client) {
+  std::string bin_name;
+  tcp_server_.Receive(client, bin_name);
+
+  auto result = GetPid(bin_name);
+  tcp_server_.Send(client, result.has_value() ? result.value() : 0);
+}
 }  // namespace LNCR

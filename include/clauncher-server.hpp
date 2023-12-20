@@ -69,8 +69,8 @@ class LauncherServer {
   void ARerun(TCP::TcpServer::ClientConnection client);
   void AIsRunning(TCP::TcpServer::ClientConnection client);
   void AGetPid(TCP::TcpServer::ClientConnection client);
-  void AGetConfig(TCP::TcpServer::ClientConnection client);
-  void ASetConfig(TCP::TcpServer::ClientConnection client);
+  // void AGetConfig(TCP::TcpServer::ClientConnection client);
+  // void ASetConfig(TCP::TcpServer::ClientConnection client);
 
   // secondary functions //
   void SendRun(const std::string& name, const ProcessConfig& config) noexcept;
@@ -78,18 +78,18 @@ class LauncherServer {
   void PrCtrlToTerm() noexcept;
   void PrCtrlMain() noexcept;
   bool IsPidAvailable(int pid) const noexcept;
+  std::optional<int> GetPid(const std::string& bin_name) noexcept;
 
-  static const int kNumAMethods = 7;
+  static const int kNumAMethods = 5;
   typedef void (LauncherServer::*MethodPtr)(TCP::TcpServer::ClientConnection);
   MethodPtr method_ptr[kNumAMethods] = {
-      &LauncherServer::ALoad,     &LauncherServer::AStop,
-      &LauncherServer::ARerun,    &LauncherServer::AIsRunning,
-      &LauncherServer::AGetPid,   &LauncherServer::AGetConfig,
-      &LauncherServer::ASetConfig};
+      &LauncherServer::ALoad, &LauncherServer::AStop, &LauncherServer::ARerun,
+      &LauncherServer::AIsRunning, &LauncherServer::AGetPid};
 
   // variables //
   std::map<std::string, ProcessConfig> load_config_;
   std::map<std::string, ProcessInfo> processes_;
+  std::mutex pr_erasing_;
 
   std::map<std::string, Runner> processes_to_run_;
   std::mutex pr_to_run_erasing_;
