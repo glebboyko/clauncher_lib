@@ -26,14 +26,14 @@ class LauncherServer {
     ProcessInfo info;
     std::optional<std::chrono::time_point<std::chrono::system_clock>> last_run =
         {};
-    std::optional<std::binary_semaphore> run_status = {};
+    std::binary_semaphore* run_status = nullptr;
   };
   struct Stopper {
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         term_sent = {};
 
     bool is_ordinary = false;
-    std::optional<std::binary_semaphore> term_status = {};
+    std::binary_semaphore* term_status = nullptr;
   };
 
   struct Client {
@@ -88,7 +88,7 @@ class LauncherServer {
       &LauncherServer::ASetConfig};
 
   // variables //
-  std::list<std::pair<std::string, ProcessConfig>> load_config_;
+  std::map<std::string, ProcessConfig> load_config_;
   std::map<std::string, ProcessInfo> processes_;
 
   std::map<std::string, Runner> processes_to_run_;

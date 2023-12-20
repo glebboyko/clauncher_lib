@@ -41,12 +41,12 @@ void LauncherServer::PrCtrlToRun() noexcept {
   for (auto iter = processes_to_run_.begin();
        iter != processes_to_run_.end();) {
     auto& [bin_name, runner] = *iter;
-    if (runner.info.pid != 0) {    // process has already sent config
+    if (runner.info.pid != 0) {           // process has already sent config
       if (runner.last_run.has_value()) {  // process has not been moved yet
         processes_.insert({bin_name, runner.info});
         runner.last_run = {};  // moved flag
       }
-      if (!runner.run_status.has_value()) {  // runner is not waiting for result
+      if (runner.run_status == nullptr) {  // runner is not waiting for result
         iter = processes_to_run_.erase(iter);
         continue;
       }
@@ -57,8 +57,7 @@ void LauncherServer::PrCtrlToRun() noexcept {
         runner.last_run = {};  // setting rerun flag
       }
     }
-    if (runner.info.pid == 0 &&
-        !runner.last_run.has_value()) {  // run flag set
+    if (runner.info.pid == 0 && !runner.last_run.has_value()) {  // run flag set
       if (SendRun(bin_name, runner.info.config)) {
         runner.last_run = std::chrono::system_clock::now();
       }
@@ -78,36 +77,36 @@ void LauncherServer::PrCtrlToTerm() noexcept {
         if (!main_iter->second.config.time_to_stop
                  .has_value()) {  // no after checking required
           processes_.erase(main_iter);
-          if (deleter.term_status.has_value()) {
+          if (deleter.term_status != nullptr) {
             deleter.is_ordinary = true;
-            deleter.term_status.value().release();
+            deleter.term_status->release();
           }
         } else {  // after checking required
           deleter.term_sent = std::chrono::system_clock::now();
         }
       }
 
-      if (deleter.term_sent.has_value()) {  // termination checker
+      if (deleter.term_sent.has_value()) {             // termination checker
         if (!IsPidAvailable(main_iter->second.pid)) {  // is terminated
           processes_.erase(main_iter);
-          if (deleter.term_status.has_value()) {
+          if (deleter.term_status != nullptr) {
             deleter.is_ordinary = true;
-            deleter.term_status.value().release();
+            deleter.term_status->release();
           }
         } else {  // is not terminated
           if (std::chrono::system_clock::now() - deleter.term_sent.value() >
               main_iter->second.config.time_to_stop) {  // is timeout
             kill(main_iter->second.pid, SIGKILL);
             processes_.erase(main_iter);
-            if (deleter.term_status.has_value()) {
+            if (deleter.term_status != nullptr) {
               deleter.is_ordinary = false;
-              deleter.term_status.value().release();
+              deleter.term_status->release();
             }
           }  // else skip
         }
       }
     }
-    if (!processes_.contains(bin_name) && !deleter.term_sent.has_value()) {
+    if (!processes_.contains(bin_name) && deleter.term_status == nullptr) {
       iter = processes_to_terminate_.erase(iter);
     } else {
       ++iter;
@@ -132,6 +131,35 @@ void LauncherServer::PrCtrlMain() noexcept {
   }
 }
 
+bool LauncherServer::RunProcess(std::string&& bin_name,
+                                LNCR::ProcessConfig&& process,
+                                bool wait_for_run) noexcept {
+  if (processes_to_run_.contains(bin_name) || processes_.contains(bin_name)) {
+    return false;
+  }
+  if (process.launch_on_boot) {
+    if (load_config_.contains(bin_name)) {
+      load_config_.erase(bin_name);
+    }
+    load_config_.insert({bin_name, process});
+  }
+
+  std::binary_semaphore* semaphore =
+      wait_for_run ? new std::binary_semaphore(0) : nullptr;
+  Runner runner = {.info = {.config = std::move(process)}, .run_status = semaphore};
+  auto inserted = processes_to_run_.insert({std::move(bin_name), std::move(runner)});
+
+  if (wait_for_run) {
+    semaphore->acquire();
+    delete semaphore;
+    inserted.first->second.run_status = nullptr;
+  }
+  return true;
+}
+bool LauncherServer::StopProcess(const std::string& bin_name, bool wait_for_term) noexcept {
+
+}
+
 /*------------------------- constructor / destructor -------------------------*/
 LauncherServer::LauncherServer(int port, const std::string& config_file,
                                const std::string& agent_binary,
@@ -146,8 +174,9 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
   process_ctrl_ = std::thread(&LauncherServer::ProcessCtrl, this);
 
   GetConfig();
-  for (auto&& [bin_name, process] : load_config_) {
-    RunProcess(std::move(bin_name), std::move(process));
+  for (const auto& [bin_name, process] : load_config_) {
+    auto c_bin_name = bin_name; auto c_process = process;
+    RunProcess(std::move(c_bin_name), std::move(c_process));
   }
 }
 
@@ -208,7 +237,7 @@ void LauncherServer::GetConfig() noexcept {
       info.time_to_stop = std::chrono::milliseconds(delay);
     }
 
-    load_config_.push_back({std::move(bin_name), std::move(info)});
+    load_config_.insert({std::move(bin_name), std::move(info)});
   } while (!config.eof());
 
   config.close();
@@ -283,9 +312,9 @@ void LauncherServer::Accepter() noexcept {
           } else if (error == 0) {  // if it is init mode
             auto& process = processes_to_run_[process_name];
             process.info.pid = pid;  // set pid : "successful run" flag
-            if (process.run_status
-                    .has_value()) {  // check if run process wait for result
-              process.run_status.value().release();
+            if (process.run_status !=
+                nullptr) {  // check if run process wait for result
+              process.run_status->release();
             }
           } else {  // error mode
             // do nothing because it will be processed by ctrl
