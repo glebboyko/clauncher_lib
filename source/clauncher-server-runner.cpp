@@ -9,10 +9,12 @@ LauncherServer* server;
 logging_foo global_logger;
 
 void TermHandler(int signal) {
-  global_logger("LAUNCHER SERVER RUNNER", "SIGNAL HANDLER",
-                "Terminating with signal " + std::to_string(signal),
-                MessagePriority::Info);
+  LRunner l_runner(LRunner::SigHandler, global_logger);
+  Logger& logger = l_runner;
+
+  logger.Log("Got signal " + std::to_string(signal), Info);
   delete server;
+  logger.Log("Launcher server deleted. Terminating", Info);
   exit(0);
 }
 
@@ -27,14 +29,22 @@ void SigTermSetup(int signal, void (*handler)(int)) {
 
 void LauncherRunner(int port, const std::string& config_file,
                     const std::string& agent_binary,
-                    logging_foo logger) noexcept {
-  global_logger = logger;
+                    logging_foo logging_f) noexcept {
+  global_logger = logging_f;
+  LRunner l_runner(LRunner::Main, global_logger);
+  Logger& logger = l_runner;
 
+  logger.Log("Trying to set signal handling", Debug);
   SigTermSetup(SIGTERM, TermHandler);
+  logger.Log("Signal handler set", Info);
 
   try {
+    logger.Log("Trying to create server", Info);
     server = new LauncherServer(port, config_file, agent_binary, global_logger);
-  } catch (...) {
+    logger.Log("Server created", Info);
+  } catch (std::exception& exception) {
+    logger.Log(std::string("Server creation failed: ") + exception.what(),
+               Error);
     return;
   }
 
