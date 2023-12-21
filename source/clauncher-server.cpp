@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <fstream>
+#include <iostream>
 
 #include "clauncher-server-impl.hpp"
 
@@ -276,7 +277,7 @@ void LauncherServer::Implementation::GetConfig() noexcept {
   if (!config.is_open()) {
     return;
   }
-  if (config.eof()) {
+  if (config.peek() == std::ifstream::traits_type::eof()) {
     config.close();
     return;
   }
