@@ -11,14 +11,84 @@ using logging_foo = std::function<void(const std::string&, const std::string&,
                                        const std::string&, int)>;
 void LoggerCap(const std::string& l_module, const std::string& l_action,
                const std::string& l_event, int priority);
-enum LModule {
 
-};
-enum LAction {
+class Logger {
+ public:
+  void Log(const std::string& event, int priority);
 
+  virtual std::string GetModule() const = 0;
+  virtual std::string GetAction() const = 0;
+
+ protected:
+  logging_foo logger_;
 };
-void Logger(LModule l_module, LAction l_action, const std::string& event,
-            int priority, logging_foo logger, void* module_address);
+
+class LServer : public Logger {
+ public:
+  enum LAction {
+    Constructor,
+    Destructor,
+    GetConfig,
+    SetConfig,
+    Accepter,
+    Receiver,
+    ProcessCtrl,
+    ClientComm,
+    RunProcess,
+    StopProcess,
+    ALoad,
+    AStop,
+    ARerun,
+    AIsRunning,
+    AGetPid,
+    AGetConfig,
+    ASetConfig,
+    SentRun,
+    PrCtrlToRun,
+    PrCtrlToTerm,
+    PrCtrlMain,
+    IsPidAvail,
+    GetPid
+  };
+  LServer(LAction action, logging_foo logger);
+
+  std::string GetModule() const override;
+  std::string GetAction() const override;
+
+ private:
+  LAction action_;
+};
+class LClient : public Logger {
+ public:
+  enum LAction {
+    Constructor,
+    Destructor,
+    LoadProcess,
+    StopProcess,
+    ReRunProcess,
+    IsProcessRunning,
+    GetProcessPid,
+    CheckTcpClient
+  };
+
+  LClient(LAction action, logging_foo logger);
+  std::string GetModule() const override;
+  std::string GetAction() const override;
+
+ private:
+  LAction action_;
+};
+class LRunner : public Logger {
+ public:
+  enum LAction { Main, SigHandler };
+
+  LRunner(LAction action, logging_foo logger);
+  std::string GetModule() const override;
+  std::string GetAction() const override;
+
+ private:
+  LAction action_;
+};
 
 struct ProcessConfig {
   std::list<std::string> args;
