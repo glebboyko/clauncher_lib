@@ -534,19 +534,4 @@ void LauncherServer::Implementation::AGetPid(
   tcp_server_.Send(client, result.has_value() ? result.value() : 0);
 }
 
-void LauncherRunner(int port, const std::string& config_file,
-                    const std::string& agent_binary,
-                    logging_foo logger) noexcept {
-  std::shared_ptr<LauncherServer> server;
-  try {
-    server = std::shared_ptr<LauncherServer>(
-        new LauncherServer(port, config_file, agent_binary, logger));
-  } catch (...) {
-    return;
-  }
-
-  while (true) {
-    sleep(100);
-  }
-}
 }  // namespace LNCR

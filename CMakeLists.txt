@@ -26,7 +26,8 @@ include_directories(source)
 
 add_library(${PROJECT_NAME}
         SHARED
-        source/clauncher-server.cpp source/clauncher-client.cpp
+        source/clauncher-server.cpp source/clauncher-server-runner.cpp
+        source/clauncher-client.cpp
         source/clauncher-supply.cpp)
 add_library(${PROJECT_NAME}_lib ALIAS ${PROJECT_NAME})
 
