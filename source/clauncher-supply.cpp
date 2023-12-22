@@ -6,12 +6,18 @@ void LoggerCap(const std::string& l_module, const std::string& l_action,
                const std::string& l_event, int priority) {}
 
 void Logger::Log(const std::string& event, int priority) {
-  logger_(GetModule(), GetAction(), event, priority);
+  auto id = GetID();
+  if (!id.empty()) {
+    id = "( " + id + " )\t";
+  }
+  logger_(GetModule(), id + GetAction(), event, priority);
 }
+std::string Logger::GetID() const { return ""; }
 
 LServer::LServer(LNCR::LServer::LAction action, logging_foo logger)
     : action_(action) {
   logger_ = logger;
+  calls[action_] += 1;
 }
 std::string LServer::GetModule() const { return "LAUNCHER SERVER"; }
 std::string LServer::GetAction() const {
@@ -66,6 +72,7 @@ std::string LServer::GetAction() const {
       return "CANNOT RECOGNIZE ACTION";
   }
 }
+std::string LServer::GetID() const { return std::to_string(calls[action_]); }
 
 LClient::LClient(LNCR::LClient::LAction action, LNCR::logging_foo logger)
     : action_(action) {
@@ -99,9 +106,7 @@ LRunner::LRunner(LNCR::LRunner::LAction action, LNCR::logging_foo logger)
     : action_(action) {
   logger_ = logger;
 }
-std::string LRunner::GetModule() const {
-  return "LAUNCHER RUNNER";
-}
+std::string LRunner::GetModule() const { return "LAUNCHER RUNNER"; }
 std::string LRunner::GetAction() const {
   switch (action_) {
     case Main:

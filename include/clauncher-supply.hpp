@@ -21,6 +21,7 @@ class Logger {
 
  protected:
   logging_foo logger_;
+  virtual std::string GetID() const;
 };
 
 class LServer : public Logger {
@@ -57,7 +58,11 @@ class LServer : public Logger {
 
  private:
   LAction action_;
+  std::string GetID() const override;
+  static int64_t calls[23];
 };
+int64_t LServer::calls[23] = {0};
+
 class LClient : public Logger {
  public:
   enum LAction {
