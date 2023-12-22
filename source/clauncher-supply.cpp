@@ -14,6 +14,7 @@ void Logger::Log(const std::string& event, int priority) {
 }
 std::string Logger::GetID() const { return ""; }
 
+int64_t LServer::calls[23] = {0};
 LServer::LServer(LNCR::LServer::LAction action, logging_foo logger)
     : action_(action) {
   logger_ = logger;

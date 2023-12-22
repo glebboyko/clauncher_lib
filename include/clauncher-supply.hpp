@@ -61,7 +61,6 @@ class LServer : public Logger {
   std::string GetID() const override;
   static int64_t calls[23];
 };
-int64_t LServer::calls[23] = {0};
 
 class LClient : public Logger {
  public:
