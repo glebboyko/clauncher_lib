@@ -699,6 +699,7 @@ void LauncherServer::Implementation::ProcessCtrl() noexcept {
     PrCtrlToTerm();
     logger.Log("Running Main table processing", Info);
     PrCtrlMain();
+    std::this_thread::sleep_for(kLoopWait);
   }
 }
 

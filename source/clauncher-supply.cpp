@@ -8,7 +8,7 @@ void LoggerCap(const std::string& l_module, const std::string& l_action,
 void Logger::Log(const std::string& event, int priority) {
   auto id = GetID();
   if (!id.empty()) {
-    id = "( " + id + " )\t";
+    id = "( " + id + " ) ";
   }
   logger_(GetModule(), id + GetAction(), event, priority);
 }
