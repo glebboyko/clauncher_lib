@@ -242,36 +242,46 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
   Logger& logger = l_server;
   logger.Log("Process: " + bin_name, Info);
 
-  logger.Log("Locking mutexes", Debug);
+  logger.Log("Locking main and run mutexes", Debug);
   pr_main_m_.lock();
   pr_to_run_m_.lock();
-  logger.Log("Mutexes locked", Debug);
+  logger.Log("Mutexes main and run locked", Debug);
 
-  if (processes_to_run_.contains(bin_name) || processes_.contains(bin_name)) {
+  bool is_running =
+      processes_to_run_.contains(bin_name) || processes_.contains(bin_name);
+
+  pr_main_m_.unlock();
+  logger.Log("Mutex main unlocked", Debug);
+
+  if (is_running) {
     logger.Log("Process is already running", Info);
 
     pr_to_run_m_.unlock();
-    pr_main_m_.unlock();
-    logger.Log("Mutexes unlocked", Debug);
+    logger.Log("Mutex run unlocked", Debug);
     return false;
-
   }
+
+  logger.Log("Locking load mutex", Debug);
+  load_conf_m_.lock();
+  logger.Log("Mutex load locked", Debug);
+
   if (process.launch_on_boot) {
     logger.Log("Process will be launched on boot", Info);
 
-    logger.Log("Locking load mutex", Debug);
-    load_conf_m_.lock();
-    logger.Log("Load mutex locked", Debug);
     if (!load_config_.contains(bin_name)) {
       logger.Log("Inserting process into loading table", Debug);
       load_config_.insert({bin_name, process});
     } else {
+      load_config_[bin_name] = process;
       logger.Log("Load table already contains process", Debug);
     }
-
-    load_conf_m_.unlock();
-    logger.Log("Load mutex unlocked", Debug);
+  } else {
+    logger.Log("Process will not be launched on boot. Trying to erase out of date content", Info);
+    load_config_.erase(bin_name);
   }
+
+  load_conf_m_.unlock();
+  logger.Log("Mutex load unlocked", Debug);
 
   std::binary_semaphore* semaphore =
       wait_for_run ? new std::binary_semaphore(0) : nullptr;
@@ -282,8 +292,7 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
       processes_to_run_.insert({std::move(bin_name), std::move(runner)});
 
   pr_to_run_m_.unlock();
-  pr_main_m_.unlock();
-  logger.Log("Mutexes unlocked", Debug);
+  logger.Log("Mutex run unlocked", Debug);
 
   if (wait_for_run) {
     logger.Log("Runner is waiting for running", Info);
@@ -413,8 +422,9 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
       .config_file_ = config_file,
       .port_ = port,
       .logger_ = logging_f});
-  logger.Log("TCP-server created. Implementation var inited. Getting load config",
-             Debug);
+  logger.Log(
+      "TCP-server created. Implementation var inited. Getting load config",
+      Debug);
   implementation_->GetConfig();
   for (const auto& [bin_name, process] : implementation_->load_config_) {
     auto c_bin_name = bin_name;
