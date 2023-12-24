@@ -867,28 +867,28 @@ void LauncherServer::Implementation::ARerun(
   pr_main_m_.lock();
   logger.Log("Mutex locked", Debug);
   if (!processes_.contains(bin_name)) {
+    pr_main_m_.unlock();
     logger.Log(
-        "Main table does not contain process. Unlocking mutex. Sending result "
+        "Main table does not contain process. Unlocked mutex. Sending result "
         "to client",
         Debug);
-    pr_main_m_.unlock();
 
     tcp_server_.Send(client, false);
-    logger.Log("Result sent to client. Exit", Info);
+    logger.Log("Result sent to client: false. Exit", Info);
     return;
   }
-  logger.Log(
-      "Main table contains process. Terminating process. Unlocking mutex",
-      Debug);
   ProcessConfig config = processes_[bin_name].config;
   pr_main_m_.unlock();
+  logger.Log(
+      "Main table contains process. Got config. Unlocked mutex. Terminating",
+      Debug);
 
   StopProcess(bin_name, true);
   logger.Log("Process terminated. Running process", Debug);
   bool result = RunProcess(std::move(bin_name), std::move(config), should_wait);
   logger.Log("Process has been run. Sending result to client", Debug);
   tcp_server_.Send(client, result);
-  logger.Log("Result sent to client, success", Info);
+  logger.Log("Result sent to client: " + std::to_string(result), Info);
 }
 
 void LauncherServer::Implementation::AIsRunning(
