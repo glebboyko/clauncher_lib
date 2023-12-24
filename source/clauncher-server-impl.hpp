@@ -83,13 +83,16 @@ struct LauncherServer::Implementation {
 
   // variables //
   std::map<std::string, ProcessConfig> load_config_;
+  std::mutex load_conf_m_;
+
   std::map<std::string, ProcessInfo> processes_;
-  std::mutex pr_erasing_;
+  std::mutex pr_main_m_;
 
   std::map<std::string, Runner> processes_to_run_;
-  std::mutex pr_to_run_erasing_;
+  std::mutex pr_to_run_m_;
 
   std::map<std::string, Stopper> processes_to_terminate_;
+  std::mutex pr_to_term_m_;
 
   TCP::TcpServer tcp_server_;
   std::list<Client> clients_;

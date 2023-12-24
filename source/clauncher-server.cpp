@@ -45,7 +45,7 @@ void LauncherServer::Implementation::PrCtrlToRun() noexcept {
   logger.Log("Starting function", Debug);
 
   logger.Log("Locking mutex", Debug);
-  pr_to_run_erasing_.lock();
+  pr_to_run_m_.lock();
   logger.Log("Mutex locked. Entering loop", Debug);
   for (auto iter = processes_to_run_.begin();
        iter != processes_to_run_.end();) {
@@ -86,7 +86,7 @@ void LauncherServer::Implementation::PrCtrlToRun() noexcept {
     }
     ++iter;
   }
-  pr_to_run_erasing_.unlock();
+  pr_to_run_m_.unlock();
   logger.Log("Mutex unlocked", Debug);
 }
 void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
@@ -94,7 +94,10 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
   Logger& logger = l_server;
   logger.Log("Starting function", Debug);
 
-  logger.Log("Entering loop", Debug);
+  logger.Log("Locking mutex", Debug);
+  pr_to_term_m_.lock();
+  logger.Log("Mutex locked. Entering loop", Debug);
+
   for (auto iter = processes_to_terminate_.begin();
        iter != processes_to_terminate_.end();) {
     auto& [bin_name, deleter] = *iter;
@@ -178,6 +181,9 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
       ++iter;
     }
   }
+
+  logger.Log("Unlocking mutex", Debug);
+  pr_to_term_m_.unlock();
   logger.Log("Function finish", Info);
 }
 void LauncherServer::Implementation::PrCtrlMain() noexcept {
@@ -186,7 +192,7 @@ void LauncherServer::Implementation::PrCtrlMain() noexcept {
   logger.Log("Starting function", Debug);
 
   logger.Log("Locking mutex", Debug);
-  pr_erasing_.lock();
+  pr_main_m_.lock();
   logger.Log("Mutex locked. Entering loop", Debug);
   for (auto iter = processes_.begin(); iter != processes_.end();) {
     logger.Log("Processing process " + iter->first, Info);
@@ -214,7 +220,7 @@ void LauncherServer::Implementation::PrCtrlMain() noexcept {
     }
     ++iter;
   }
-  pr_erasing_.unlock();
+  pr_main_m_.unlock();
   logger.Log("Mutex unlocked", Debug);
 }
 
@@ -225,17 +231,35 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
   Logger& logger = l_server;
   logger.Log("Process: " + bin_name, Info);
 
+  logger.Log("Locking mutexes", Debug);
+  pr_main_m_.lock();
+  pr_to_run_m_.lock();
+  logger.Log("Mutexes locked", Debug);
+
   if (processes_to_run_.contains(bin_name) || processes_.contains(bin_name)) {
     logger.Log("Process is already running", Info);
+
+    pr_to_run_m_.unlock();
+    pr_main_m_.unlock();
+    logger.Log("Mutexes unlocked", Debug);
     return false;
+
   }
   if (process.launch_on_boot) {
     logger.Log("Process will be launched on boot", Info);
-    if (load_config_.contains(bin_name)) {
-      logger.Log("Load table already contains process, erasing", Debug);
-      load_config_.erase(bin_name);
+
+    logger.Log("Locking load mutex", Debug);
+    load_conf_m_.lock();
+    logger.Log("Load mutex locked", Debug);
+    if (!load_config_.contains(bin_name)) {
+      logger.Log("Inserting process into loading table", Debug);
+      load_config_.insert({bin_name, process});
+    } else {
+      logger.Log("Load table already contains process", Debug);
     }
-    load_config_.insert({bin_name, process});
+
+    load_conf_m_.unlock();
+    logger.Log("Load mutex unlocked", Debug);
   }
 
   std::binary_semaphore* semaphore =
@@ -245,6 +269,10 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
   logger.Log("Inserting process into run table", Debug);
   auto inserted =
       processes_to_run_.insert({std::move(bin_name), std::move(runner)});
+
+  pr_to_run_m_.unlock();
+  pr_main_m_.unlock();
+  logger.Log("Mutexes unlocked", Debug);
 
   if (wait_for_run) {
     logger.Log("Runner is waiting for running", Info);
@@ -263,6 +291,10 @@ bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
   Logger& logger = l_server;
   logger.Log("Process: " + bin_name, Info);
 
+  logger.Log("Locking load mutex", Debug);
+  load_conf_m_.lock();
+  logger.Log("Load mutex locked", Debug);
+
   if (load_config_.contains(bin_name)) {
     logger.Log("Load table contains process, erasing", Info);
     load_config_.erase(bin_name);
@@ -270,12 +302,23 @@ bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
     logger.Log("Load table does not contain process", Debug);
   }
 
+  load_conf_m_.unlock();
+  logger.Log("Load mutex unlocked", Debug);
+
   std::binary_semaphore* semaphore =
       wait_for_term ? new std::binary_semaphore(0) : nullptr;
   Stopper stopper = {.term_status = semaphore};
 
+  logger.Log("Locking mutex", Debug);
+  pr_to_term_m_.lock();
+  logger.Log("Mutex locked", Debug);
+
   auto iter =
       processes_to_terminate_.insert({std::move(bin_name), std::move(stopper)});
+
+  pr_to_term_m_.unlock();
+  logger.Log("Mutex unlocked", Debug);
+
   if (!iter.second) {
     if (semaphore != nullptr) {
       delete semaphore;
@@ -325,12 +368,12 @@ std::optional<int> LauncherServer::Implementation::GetPid(
   logger.Log("Process: " + bin_name, Debug);
 
   logger.Log("Locking mutex", Debug);
-  pr_erasing_.lock();
+  pr_main_m_.lock();
   logger.Log("Mutex locked", Debug);
 
   if (!processes_.contains(bin_name)) {
     logger.Log("Main table does not contain process, unlocking mutex", Debug);
-    pr_erasing_.unlock();
+    pr_main_m_.unlock();
     return {};
   }
 
@@ -339,7 +382,7 @@ std::optional<int> LauncherServer::Implementation::GetPid(
                  ". Unlocking mutex",
              Debug);
 
-  pr_erasing_.unlock();
+  pr_main_m_.unlock();
 
   return pid;
 }
@@ -359,17 +402,8 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
       .config_file_ = config_file,
       .port_ = port,
       .logger_ = logging_f});
-  logger.Log("TCP-server created. Implementation var inited. Creating threads",
+  logger.Log("TCP-server created. Implementation var inited. Getting load config",
              Debug);
-  implementation_->accepter_ =
-      std::thread(&Implementation::Accepter, implementation_.get());
-  implementation_->receiver_ =
-      std::thread(&Implementation::Receiver, implementation_.get());
-  implementation_->process_ctrl_ =
-      std::thread(&Implementation::ProcessCtrl, implementation_.get());
-  logger.Log("Threads created", Debug);
-
-  logger.Log("Getting load config", Debug);
   implementation_->GetConfig();
   for (const auto& [bin_name, process] : implementation_->load_config_) {
     auto c_bin_name = bin_name;
@@ -377,6 +411,15 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
     implementation_->RunProcess(std::move(c_bin_name), std::move(c_process));
   }
   logger.Log("Config got", Debug);
+
+  logger.Log("Creating threads", Debug);
+  implementation_->accepter_ =
+      std::thread(&Implementation::Accepter, implementation_.get());
+  implementation_->receiver_ =
+      std::thread(&Implementation::Receiver, implementation_.get());
+  implementation_->process_ctrl_ =
+      std::thread(&Implementation::ProcessCtrl, implementation_.get());
+  logger.Log("Threads created", Debug);
   logger.Log("Launcher server created", Info);
 }
 
@@ -415,8 +458,12 @@ LauncherServer::~LauncherServer() {
   }
   logger.Log("Clients terminated", Debug);
 
-  logger.Log("Saving load config", Debug);
+  logger.Log("Saving load config. Locking mutex", Debug);
+  implementation_->load_conf_m_.lock();
+  logger.Log("Mutex locked", Debug);
   implementation_->SaveConfig();
+  implementation_->load_conf_m_.unlock();
+  logger.Log("Mutex unlocked", Debug);
 
   for (const auto& [bin_name, process] : implementation_->processes_) {
     implementation_->StopProcess(bin_name, false);
@@ -424,7 +471,7 @@ LauncherServer::~LauncherServer() {
   logger.Log("Load config saved. Joining main table", Debug);
   implementation_->process_ctrl_.join();
   logger.Log("Main table joined", Debug);
-  logger.Log("Client deleted", Info);
+  logger.Log("Server deleted", Info);
 }
 
 /*---------------------------- boot configuration ----------------------------*/
@@ -567,7 +614,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
 
           // block tables to use
           logger.Log("Locking mutex", Debug);
-          pr_to_run_erasing_.lock();
+          pr_to_run_m_.lock();
           logger.Log("Mutex locked", Debug);
 
           // check where is it contained
@@ -599,7 +646,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
 
           // unlock mutexes
           logger.Log("Unlocking mutex", Info);
-          pr_to_run_erasing_.unlock();
+          pr_to_run_m_.unlock();
         }
       } catch (TCP::TcpException& tcp_exception) {
         if (tcp_exception.GetType() != TCP::TcpException::ConnectionBreak) {
@@ -791,14 +838,14 @@ void LauncherServer::Implementation::ARerun(
   tcp_server_.Receive(client, bin_name, should_wait);
 
   logger.Log("Config received. Terminating process. Locking mutex", Debug);
-  pr_erasing_.lock();
+  pr_main_m_.lock();
   logger.Log("Mutex locked", Debug);
   if (!processes_.contains(bin_name)) {
     logger.Log(
         "Main table does not contain process. Unlocking mutex. Sending result "
         "to client",
         Debug);
-    pr_erasing_.unlock();
+    pr_main_m_.unlock();
 
     tcp_server_.Send(client, false);
     logger.Log("Result sent to client. Exit", Info);
@@ -808,7 +855,7 @@ void LauncherServer::Implementation::ARerun(
       "Main table contains process. Terminating process. Unlocking mutex",
       Debug);
   ProcessConfig config = processes_[bin_name].config;
-  pr_erasing_.unlock();
+  pr_main_m_.unlock();
 
   StopProcess(bin_name, true);
   logger.Log("Process terminated. Running process", Debug);
