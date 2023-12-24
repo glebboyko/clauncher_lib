@@ -96,6 +96,7 @@ struct LauncherServer::Implementation {
 
   TCP::TcpServer tcp_server_;
   std::list<Client> clients_;
+  std::mutex clients_m_;
 
   std::string agent_binary_;
   std::string config_file_;
