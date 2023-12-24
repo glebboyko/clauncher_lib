@@ -431,12 +431,29 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
   logger.Log("Config got", Debug);
 
   logger.Log("Creating threads", Debug);
-  implementation_->accepter_ =
-      std::thread(&Implementation::Accepter, implementation_.get());
-  implementation_->receiver_ =
-      std::thread(&Implementation::Receiver, implementation_.get());
-  implementation_->process_ctrl_ =
-      std::thread(&Implementation::ProcessCtrl, implementation_.get());
+  try {
+    implementation_->accepter_ =
+        std::thread(&Implementation::Accepter, implementation_.get());
+  } catch (std::system_error& error) {
+    logger.Log("Cannot create accepter thread", Error);
+    throw error;
+  }
+
+  try {
+    implementation_->receiver_ =
+        std::thread(&Implementation::Receiver, implementation_.get());
+  } catch (std::system_error& error) {
+    logger.Log("Cannot create receiver thread", Error);
+    throw error;
+  }
+  try {
+    implementation_->process_ctrl_ =
+        std::thread(&Implementation::ProcessCtrl, implementation_.get());
+  } catch (std::system_error& error) {
+    logger.Log("Cannot create process control thread", Error);
+    throw error;
+  }
+
   logger.Log("Threads created", Debug);
   logger.Log("Launcher server created", Info);
 }
@@ -615,7 +632,13 @@ void LauncherServer::Implementation::Accepter() noexcept {
                                                                      : "Agent"),
                    Info);
         if (send_from == SenderStatus::Client) {
+          logger.Log("Locking client mutex", Debug);
+          clients_m_.lock();
+          logger.Log("Client mutex locked", Debug);
           clients_.push_back({.connection = *connection});
+          clients_m_.unlock();
+          logger.Log("Client mutex unlocked", Debug);
+
           delete connection;
           logger.Log("Client inserted to table. Connection closed", Info);
           return;
@@ -631,9 +654,9 @@ void LauncherServer::Implementation::Accepter() noexcept {
           logger.Log("Config received. Connection closed", Debug);
 
           // block tables to use
-          logger.Log("Locking mutex", Debug);
+          logger.Log("Locking Run mutex", Debug);
           pr_to_run_m_.lock();
-          logger.Log("Mutex locked", Debug);
+          logger.Log("Mutex Run locked", Debug);
 
           // check where is it contained
           bool to_run = processes_to_run_.contains(process_name);
@@ -663,8 +686,8 @@ void LauncherServer::Implementation::Accepter() noexcept {
           }
 
           // unlock mutexes
-          logger.Log("Unlocking mutex", Info);
           pr_to_run_m_.unlock();
+          logger.Log("Unlocked run mutex", Debug);
         }
       } catch (TCP::TcpException& tcp_exception) {
         if (tcp_exception.GetType() != TCP::TcpException::ConnectionBreak) {
@@ -755,7 +778,8 @@ void LauncherServer::Implementation::Receiver() noexcept {
       logger.Log("Moving to next process", Debug);
     }
     clients_m_.unlock();
-    logger.Log("Processed all connections. Unlocked client mutex. Sleeping", Info);
+    logger.Log("Processed all connections. Unlocked client mutex. Sleeping",
+               Info);
     std::this_thread::sleep_for(kLoopWait);
   }
 }
