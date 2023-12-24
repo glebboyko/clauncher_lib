@@ -276,7 +276,10 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
       logger.Log("Load table already contains process", Debug);
     }
   } else {
-    logger.Log("Process will not be launched on boot. Trying to erase out of date content", Info);
+    logger.Log(
+        "Process will not be launched on boot. Trying to erase out of date "
+        "content",
+        Info);
     load_config_.erase(bin_name);
   }
 
@@ -315,11 +318,11 @@ bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
   load_conf_m_.lock();
   logger.Log("Load mutex locked", Debug);
 
-  if (load_config_.contains(bin_name)) {
-    logger.Log("Load table contains process, erasing", Info);
-    load_config_.erase(bin_name);
+  logger.Log("Trying to erase process from load table", Debug);
+  if (load_config_.erase(bin_name) == 1) {
+    logger.Log("Process erased from load table", Info);
   } else {
-    logger.Log("Load table does not contain process", Debug);
+    logger.Log("Table was not contain this process", Debug);
   }
 
   load_conf_m_.unlock();
@@ -343,7 +346,10 @@ bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
     if (semaphore != nullptr) {
       delete semaphore;
     }
+    logger.Log("Term table has already contained process. Term exec", Info);
     return true;
+  } else {
+    logger.Log("Process inserted to term table", Debug);
   }
 
   bool result = true;
