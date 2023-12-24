@@ -95,6 +95,7 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
   logger.Log("Starting function", Debug);
 
   logger.Log("Locking mutex", Debug);
+  pr_main_m_.lock();
   pr_to_term_m_.lock();
   logger.Log("Mutex locked. Entering loop", Debug);
 
@@ -184,6 +185,7 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
 
   logger.Log("Unlocking mutex", Debug);
   pr_to_term_m_.unlock();
+  pr_main_m_.unlock();
   logger.Log("Function finish", Info);
 }
 void LauncherServer::Implementation::PrCtrlMain() noexcept {
@@ -204,7 +206,16 @@ void LauncherServer::Implementation::PrCtrlMain() noexcept {
           logger.Log("Prosess's rerun flag is set to true. Rerunning", Info);
           auto bin_name = iter->first;
           auto config = std::move(iter->second.config);
+
+          pr_main_m_.unlock();
+          logger.Log("Mutex unlocked", Debug);
+
           RunProcess(std::move(bin_name), std::move(config));
+
+          logger.Log("Locking mutex", Debug);
+          pr_main_m_.lock();
+          logger.Log("Mutex locked", Debug);
+
         } else {
           logger.Log("Process's rerun flag is set to false", Debug);
         }
