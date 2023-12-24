@@ -31,14 +31,6 @@ std::list<std::string> Split(const std::string& string, const char& delimiter) {
   return split;
 }
 
-template <typename T>
-auto SaveListErase(std::list<T>& list, decltype(list.begin()) iter) {
-  auto deleting_iter = iter;
-  iter++;
-  list.erase(deleting_iter);
-  return iter;
-}
-
 void LauncherServer::Implementation::PrCtrlToRun() noexcept {
   LServer l_server(LServer::PrCtrlToRun, logger_);
   Logger& logger = l_server;
@@ -705,11 +697,17 @@ void LauncherServer::Implementation::Receiver() noexcept {
 
   while (is_active_) {
     logger.Log("Starting process clients", Info);
+
+    logger.Log("Locking client mutex", Debug);
+    clients_m_.lock();
+    logger.Log("Client mutex locked", Debug);
+
     for (auto iter = clients_.begin(); is_active_ && iter != clients_.end();) {
       logger.Log("Processing client", Debug);
       // terminating communication
       if (iter->is_running) {
         logger.Log("Client thread is running, skip", Debug);
+        ++iter;
         continue;
       }
       logger.Log("Client thread is not running", Debug);
@@ -724,7 +722,7 @@ void LauncherServer::Implementation::Receiver() noexcept {
 
       if (!iter->connection.has_value()) {
         logger.Log("Client has been disconnected, erasing", Info);
-        iter = SaveListErase(clients_, iter);
+        iter = clients_.erase(iter);
         continue;
       }
       logger.Log("Client is connected", Debug);
@@ -733,16 +731,16 @@ void LauncherServer::Implementation::Receiver() noexcept {
         logger.Log("Checking client message availability", Debug);
         if (tcp_server_.IsAvailable(iter->connection.value())) {
           logger.Log("Client message is available. Running thread", Info);
+          iter->is_running = true;
           iter->curr_communication =
               std::thread(&LauncherServer::Implementation::ClientCommunication,
                           this, new decltype(iter)(iter));
-          iter->is_running = true;
           logger.Log("Thread is running", Debug);
         }
       } catch (TCP::TcpException& tcp_exception) {
         if (tcp_exception.GetType() == TCP::TcpException::ConnectionBreak) {
           logger.Log("Client connection broke, erasing", Warning);
-          iter = SaveListErase(clients_, iter);
+          iter = clients_.erase(iter);
           continue;
         }
         logger.Log("Got exception while checking message availability:" +
@@ -756,7 +754,8 @@ void LauncherServer::Implementation::Receiver() noexcept {
       ++iter;
       logger.Log("Moving to next process", Debug);
     }
-    logger.Log("Processed all connections. Sleeping", Info);
+    clients_m_.unlock();
+    logger.Log("Processed all connections. Unlocked client mutex. Sleeping", Info);
     std::this_thread::sleep_for(kLoopWait);
   }
 }
