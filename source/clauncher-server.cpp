@@ -398,17 +398,16 @@ std::optional<int> LauncherServer::Implementation::GetPid(
   logger.Log("Mutex locked", Debug);
 
   if (!processes_.contains(bin_name)) {
-    logger.Log("Main table does not contain process, unlocking mutex", Debug);
     pr_main_m_.unlock();
+    logger.Log("Main table does not contain process, unlocking mutex", Debug);
     return {};
   }
 
   int pid = processes_[bin_name].pid;
-  logger.Log("Main table contains process. PID: " + std::to_string(pid) +
-                 ". Unlocking mutex",
-             Debug);
-
   pr_main_m_.unlock();
+  logger.Log("Main table contains process. PID: " + std::to_string(pid) +
+                 ". Unlocked mutex",
+             Debug);
 
   return pid;
 }
