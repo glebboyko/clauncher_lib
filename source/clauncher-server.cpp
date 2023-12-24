@@ -830,7 +830,7 @@ void LauncherServer::Implementation::ALoad(
   bool result = RunProcess(std::move(bin_name), std::move(config), should_wait);
   logger.Log("Process has been run, sending result to client", Debug);
   tcp_server_.Send(client, result);
-  logger.Log("Result sent to client, success", Info);
+  logger.Log("Result sent to client: " + std::to_string(result), Info);
 }
 
 void LauncherServer::Implementation::AStop(
