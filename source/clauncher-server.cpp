@@ -849,7 +849,7 @@ void LauncherServer::Implementation::AStop(
 
   logger.Log("Process has been terminated, sending result to client", Debug);
   tcp_server_.Send(client, result);
-  logger.Log("Result sent to client, success", Info);
+  logger.Log("Result sent to client: " + std::to_string(result), Info);
 }
 
 void LauncherServer::Implementation::ARerun(
