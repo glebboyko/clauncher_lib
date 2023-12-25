@@ -474,23 +474,6 @@ LauncherServer::~LauncherServer() {
   implementation_->accepter_.join();
   logger.Log("Accepter joined", Debug);
 
-  logger.Log("Terminating clients", Debug);
-  for (auto& [connection, curr_communication, is_running] :
-       implementation_->clients_) {
-    if (connection.has_value()) {
-      logger.Log("Client is running, closing connection", Debug);
-      implementation_->tcp_server_.CloseConnection(connection.value());
-      if (curr_communication.has_value()) {
-        //////        logger.Log("Joining client thread", Debug);
-        curr_communication->join();
-        logger.Log("Client thread joined", Debug);
-      } else {
-        logger.Log("Client is not running", Debug);
-      }
-    }
-  }
-  logger.Log("Clients terminated", Debug);
-
   logger.Log("Saving load config. Locking mutex", Debug);
   implementation_->load_conf_m_.lock();
   logger.Log("Mutex locked", Debug);
@@ -504,6 +487,57 @@ LauncherServer::~LauncherServer() {
   logger.Log("Load config saved. Joining main table", Debug);
   implementation_->process_ctrl_.join();
   logger.Log("Main table joined", Debug);
+
+  logger.Log("Deleting existing semaphores", Debug);
+  for (auto& [bin_name, runner] : implementation_->processes_to_run_) {
+    if (runner.run_status != nullptr && !runner.semaphore_to_delete) {
+      runner.run_status->try_acquire();
+      runner.run_status->release();
+    }
+  }
+  for (auto& [bin_name, stopper] : implementation_->processes_to_terminate_) {
+    if (stopper.term_status != nullptr && !stopper.semaphore_to_delete) {
+      stopper.term_status->try_acquire();
+      stopper.term_status->release();
+    }
+  }
+  for (auto& [bin_name, runner] : implementation_->processes_to_run_) {
+    if (runner.run_status != nullptr) {
+      while (!runner.semaphore_to_delete) {
+      }
+      delete runner.run_status;
+    }
+  }
+  for (auto& [bin_name, stopper] : implementation_->processes_to_terminate_) {
+    if (stopper.term_status != nullptr) {
+      while (!stopper.semaphore_to_delete) {
+
+      }
+      delete stopper.term_status;
+    }
+  }
+  logger.Log("All semaphores deleted", Debug);
+
+  logger.Log("Terminating clients", Debug);
+  for (auto& [connection, curr_communication, is_running] :
+       implementation_->clients_) {
+    if (connection.has_value()) {
+      logger.Log("Client is running, closing connection", Debug);
+      try {
+        implementation_->tcp_server_.CloseConnection(connection.value());
+      } catch (std::exception& exception) {
+        logger.Log("Multithreading tcp connection error", Warning);
+      }
+      if (curr_communication.has_value()) {
+        logger.Log("Joining client thread", Debug);
+        curr_communication->join();
+        logger.Log("Client thread joined", Debug);
+      } else {
+        logger.Log("Client is not running", Debug);
+      }
+    }
+  }
+  logger.Log("Clients terminated", Debug);
   logger.Log("Server deleted", Info);
 }
 
