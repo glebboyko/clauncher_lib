@@ -26,7 +26,7 @@ LauncherClient::LauncherClient(int port, LNCR::logging_foo logging_f) {
   implementation_ = std::unique_ptr<Implementation>(new Implementation{
       .port_ = port,
       .logger_ = logging_f,
-      .tcp_client_ = TCP::TcpClient(0, port, "127.0.0.0", logging_f)});
+      .tcp_client_ = TCP::TcpClient(0, port, "127.0.0.1", logging_f)});
   logger.Log("Tcp-client created", Debug);
 
   logger.Log("Trying to send configuration to server", Debug);
