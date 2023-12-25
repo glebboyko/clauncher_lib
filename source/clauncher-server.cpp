@@ -52,7 +52,11 @@ void LauncherServer::Implementation::PrCtrlToRun() noexcept {
       } else {
         logger.Log("Process has already moved to main table", Info);
       }
-      if (runner.run_status == nullptr) {  // runner is not waiting for result
+      if (runner.run_status == nullptr ||
+          runner.semaphore_to_delete) {  // runner is not waiting for result
+        if (runner.semaphore_to_delete) {
+          delete runner.run_status;
+        }
         iter = processes_to_run_.erase(iter);
         logger.Log(
             "Runner is not waiting for result. Erasing process in run table",
@@ -71,7 +75,8 @@ void LauncherServer::Implementation::PrCtrlToRun() noexcept {
         logger.Log("Launching not timeout", Debug);
       }
     }
-    if (runner.info.pid == 0 && !runner.last_run.has_value()) {  // run flag set
+    if (is_active_ && runner.info.pid == 0 &&
+        !runner.last_run.has_value()) {  // run flag set
       runner.last_run = std::chrono::system_clock::now();
       SendRun(bin_name, runner.info.config);
       logger.Log("Set run flag. Agent has been run", Info);
@@ -109,7 +114,7 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
               "main table",
               Info);
           processes_.erase(main_iter);
-          if (deleter.term_status != nullptr) {
+          if (deleter.term_status != nullptr && !deleter.semaphore_to_delete) {
             logger.Log("Runner is waiting for result", Info);
             deleter.is_ordinary = true;
             deleter.term_status->release();
@@ -163,7 +168,10 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
     } else {
       logger.Log("Process has already been terminated", Debug);
     }
-    if (!processes_.contains(bin_name) && deleter.term_status == nullptr) {
+    if (!processes_.contains(bin_name) && (deleter.term_status == nullptr || deleter.semaphore_to_delete)) {
+      if (deleter.semaphore_to_delete) {
+        delete deleter.term_status;
+      }
       logger.Log(
           "Process has been terminated, runner is not waiting for result. "
           "Erasing from termination table",
@@ -511,7 +519,6 @@ LauncherServer::~LauncherServer() {
   for (auto& [bin_name, stopper] : implementation_->processes_to_terminate_) {
     if (stopper.term_status != nullptr) {
       while (!stopper.semaphore_to_delete) {
-
       }
       delete stopper.term_status;
     }
