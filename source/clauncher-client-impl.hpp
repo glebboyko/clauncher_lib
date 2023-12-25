@@ -11,7 +11,7 @@ struct LauncherClient::Implementation {
 
   int port_;
   logging_foo logger_;
-  std::optional<TCP::TcpClient> tcp_client_;
+  TCP::TcpClient* tcp_client_ = nullptr;
 };
 
 }  // namespace LNCR

@@ -26,11 +26,11 @@ LauncherClient::LauncherClient(int port, LNCR::logging_foo logging_f) {
   implementation_ = std::unique_ptr<Implementation>(new Implementation{
       .port_ = port,
       .logger_ = logging_f,
-      .tcp_client_ = TCP::TcpClient(0, port, "127.0.0.1", logging_f)});
+      .tcp_client_ = new TCP::TcpClient(0, port, "127.0.0.1", logging_f)});
   logger.Log("Tcp-client created", Debug);
 
   logger.Log("Trying to send configuration to server", Debug);
-  implementation_->tcp_client_.value().Send(SenderStatus::Client);
+  implementation_->tcp_client_->Send(SenderStatus::Client);
   logger.Log("Configuration successfully sent. Client created", Debug);
 
   logger.Log("Client created", Info);
@@ -50,8 +50,8 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
 
   try {
     logger.Log("Trying to send command to server", Debug);
-    implementation_->tcp_client_.value().Send(Command::Load);
-    implementation_->tcp_client_.value().Send(
+    implementation_->tcp_client_->Send(Command::Load);
+    implementation_->tcp_client_->Send(
         bin_name, Unite(process_config.args, ';'),
         process_config.launch_on_boot, process_config.term_rerun,
         process_config.time_to_stop.has_value()
@@ -68,7 +68,8 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
   } catch (TCP::TcpException& exception) {
     logger.Log(std::string("Caught exception: ") + exception.what(), Warning);
     if (exception.GetType() == TCP::TcpException::ConnectionBreak) {
-      implementation_->tcp_client_ = {};
+      delete implementation_->tcp_client_;
+      implementation_->tcp_client_ = nullptr;
     }
     throw exception;
   }
@@ -97,7 +98,8 @@ bool LauncherClient::StopProcess(const std::string& bin_name,
   } catch (TCP::TcpException& exception) {
     logger.Log(std::string("Caught exception: ") + exception.what(), Warning);
     if (exception.GetType() == TCP::TcpException::ConnectionBreak) {
-      implementation_->tcp_client_ = {};
+      delete implementation_->tcp_client_;
+      implementation_->tcp_client_ = nullptr;
     }
     throw exception;
   }
@@ -126,7 +128,8 @@ bool LauncherClient::ReRunProcess(const std::string& bin_name,
   } catch (TCP::TcpException& exception) {
     logger.Log(std::string("Caught exception: ") + exception.what(), Warning);
     if (exception.GetType() == TCP::TcpException::ConnectionBreak) {
-      implementation_->tcp_client_ = {};
+      delete implementation_->tcp_client_;
+      implementation_->tcp_client_ = nullptr;
     }
     throw exception;
   }
@@ -154,7 +157,8 @@ bool LauncherClient::IsProcessRunning(const std::string& bin_name) {
   } catch (TCP::TcpException& exception) {
     logger.Log(std::string("Caught exception: ") + exception.what(), Warning);
     if (exception.GetType() == TCP::TcpException::ConnectionBreak) {
-      implementation_->tcp_client_ = {};
+      delete implementation_->tcp_client_;
+      implementation_->tcp_client_ = nullptr;
     }
     throw exception;
   }
@@ -185,7 +189,8 @@ std::optional<int> LauncherClient::GetProcessPid(const std::string& bin_name) {
   } catch (TCP::TcpException& exception) {
     logger.Log(std::string("Caught exception: ") + exception.what(), Warning);
     if (exception.GetType() == TCP::TcpException::ConnectionBreak) {
-      implementation_->tcp_client_ = {};
+      delete implementation_->tcp_client_;
+      implementation_->tcp_client_ = nullptr;
     }
     throw exception;
   }
@@ -195,10 +200,10 @@ void LauncherClient::Implementation::CheckTcpClient() {
   Logger& logger = l_client;
   logger.Log("Trying to check tcp-connection", Debug);
 
-  if (!tcp_client_.has_value()) {
+  if (tcp_client_ == nullptr) {
     try {
       logger.Log("Tcp-connection is not active. Trying to connect", Debug);
-      tcp_client_ = TCP::TcpClient(0, port_, "127.0.0.1", logger_);
+      tcp_client_ = new TCP::TcpClient(0, port_, "127.0.0.1", logger_);
     } catch (TCP::TcpException& tcp_exception) {
       logger.Log(std::string("Tcp-connection cannot be established: ") +
                      tcp_exception.what(),
