@@ -36,6 +36,8 @@ LauncherClient::LauncherClient(int port, LNCR::logging_foo logging_f) {
   logger.Log("Client created", Info);
 }
 
+LauncherClient::~LauncherClient() {}
+
 bool LauncherClient::LoadProcess(const std::string& bin_name,
                                  const LNCR::ProcessConfig& process_config,
                                  bool wait_for_run) {

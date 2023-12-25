@@ -11,7 +11,7 @@ namespace LNCR {
 class LauncherClient {
  public:
   LauncherClient(int port, logging_foo = LoggerCap);
-  ~LauncherClient() = default;
+  ~LauncherClient();
 
   bool LoadProcess(const std::string& bin_name,
                    const ProcessConfig& process_config, bool wait_for_run);
