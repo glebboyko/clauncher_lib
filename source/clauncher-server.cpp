@@ -292,8 +292,7 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
   if (wait_for_run) {
     logger.Log("Runner is waiting for running", Info);
     semaphore->acquire();
-    inserted.first->second.run_status = nullptr;
-    delete semaphore;
+    inserted.first->second.semaphore_to_delete = true;
     logger.Log("Process is running", Info);
   } else {
     logger.Log("Runner is not waiting for running", Info);
@@ -350,8 +349,7 @@ bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
     logger.Log("Terminator is waiting for terminating", Info);
     semaphore->acquire();
     result = iter.first->second.is_ordinary;
-    iter.first->second.term_status = nullptr;
-    delete semaphore;
+    iter.first->second.semaphore_to_delete = true;
     logger.Log("Process is terminated with " + std::to_string(result), Info);
   } else {
     logger.Log("Terminator is not waiting for terminating", Info);
@@ -483,7 +481,7 @@ LauncherServer::~LauncherServer() {
       logger.Log("Client is running, closing connection", Debug);
       implementation_->tcp_server_.CloseConnection(connection.value());
       if (curr_communication.has_value()) {
-        logger.Log("Joining client thread", Debug);
+        //////        logger.Log("Joining client thread", Debug);
         curr_communication->join();
         logger.Log("Client thread joined", Debug);
       } else {
@@ -672,8 +670,9 @@ void LauncherServer::Implementation::Accepter() noexcept {
                        Info);
             auto& process = processes_to_run_[process_name];
             process.info.pid = pid;  // set pid : "successful run" flag
-            if (process.run_status !=
-                nullptr) {  // check if run process wait for result
+            if (process.run_status != nullptr &&
+                !process.semaphore_to_delete) {  // check if run process wait
+                                                 // for result
               logger.Log("Runner is waiting. Realising", Info);
               process.run_status->release();
             } else {

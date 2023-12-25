@@ -26,14 +26,18 @@ struct LauncherServer::Implementation {
     ProcessInfo info;
     std::optional<std::chrono::time_point<std::chrono::system_clock>> last_run =
         {};
+
     std::binary_semaphore* run_status = nullptr;
+    bool semaphore_to_delete = false;
   };
   struct Stopper {
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         term_sent = {};
 
     bool is_ordinary = false;
+
     std::binary_semaphore* term_status = nullptr;
+    bool semaphore_to_delete = false;
   };
 
   struct Client {
