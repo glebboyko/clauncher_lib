@@ -168,7 +168,8 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
     } else {
       logger.Log("Process has already been terminated", Debug);
     }
-    if (!processes_.contains(bin_name) && (deleter.term_status == nullptr || deleter.semaphore_to_delete)) {
+    if (!processes_.contains(bin_name) &&
+        (deleter.term_status == nullptr || deleter.semaphore_to_delete)) {
       if (deleter.semaphore_to_delete) {
         delete deleter.term_status;
       }
@@ -206,6 +207,8 @@ void LauncherServer::Implementation::PrCtrlMain() noexcept {
           logger.Log("Prosess's rerun flag is set to true. Rerunning", Info);
           auto bin_name = iter->first;
           auto config = std::move(iter->second.config);
+          logger.Log("Process erasing from main table", Info);
+          iter = processes_.erase(iter);
 
           pr_main_m_.unlock();
           logger.Log("Mutex unlocked", Debug);
@@ -218,10 +221,9 @@ void LauncherServer::Implementation::PrCtrlMain() noexcept {
 
         } else {
           logger.Log("Process's rerun flag is set to false", Debug);
+          logger.Log("Process erasing from main table", Info);
+          iter = processes_.erase(iter);
         }
-
-        logger.Log("Process erasing from main table", Info);
-        iter = processes_.erase(iter);
         continue;
       } else {
         logger.Log("Process is running", Debug);
@@ -608,7 +610,8 @@ void LauncherServer::Implementation::SaveConfig() const noexcept {
     return;
   }
 
-  logger.Log("Saving table size: " + std::to_string(load_config_.size()), Debug);
+  logger.Log("Saving table size: " + std::to_string(load_config_.size()),
+             Debug);
   config << load_config_.size() << "\n";
 
   logger.Log("Saving configs to file", Debug);
@@ -716,7 +719,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
             if (process.run_status != nullptr &&
                 !process.semaphore_to_delete) {  // check if run process wait
                                                  // for result
-              logger.Log("Runner is waiting. Realising", Info);
+              logger.Log("Runner is waiting. Releasing", Info);
               process.run_status->release();
             } else {
               logger.Log("Runner is not waiting", Debug);
@@ -833,7 +836,7 @@ void LauncherServer::Implementation::ProcessCtrl() noexcept {
   while (is_active_ || !processes_.empty()) {
     logger.Log("Running Run table processing", Info);
     PrCtrlToRun();
-    logger.Log("Running Terminating table processing", Info);
+    logger.Log("Terminating table processing", Info);
     PrCtrlToTerm();
     logger.Log("Running Main table processing", Info);
     PrCtrlMain();
@@ -878,15 +881,18 @@ void LauncherServer::Implementation::ALoad(
   logger.Log("Trying to receive config", Debug);
   std::string bin_name;
   ProcessConfig config;
-  std::string tmp_args;
+  int num_of_args;
   int tmp_time_to_stop;
   bool should_wait;
-  tcp_server_.Receive(client, bin_name, tmp_args, config.launch_on_boot,
-                      config.term_rerun, config.term_rerun, tmp_time_to_stop,
-                      should_wait);
+  tcp_server_.Receive(client, bin_name, num_of_args, config.launch_on_boot,
+                      config.term_rerun, tmp_time_to_stop, should_wait);
+  for (int i = 0; i < num_of_args; ++i) {
+    std::string arg;
+    tcp_server_.Receive(client, arg);
+    config.args.push_back(arg);
+  }
   logger.Log("Config received", Debug);
 
-  config.args = Split(tmp_args, ';');
   if (tmp_time_to_stop != 0) {
     config.time_to_stop = std::chrono::milliseconds(tmp_time_to_stop);
   }
