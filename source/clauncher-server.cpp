@@ -186,6 +186,15 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
         }
       } else if (processes_to_run_.contains(bin_name)) {
         logger.Log("Process has got pid and located in Run table. Skip", Info);
+      } else {
+        logger.Log("Process has already been terminated", Info);
+        if (deleter.term_status != nullptr) {
+          logger.Log("Terminator is waiting for result", Debug);
+          deleter.is_ordinary = true;
+          deleter.term_status->release();
+        } else {
+          logger.Log("Terminator is not waiting fir result", Debug);
+        }
       }
 
       pr_to_run_m_.unlock();
