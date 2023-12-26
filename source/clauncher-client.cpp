@@ -52,12 +52,15 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
     logger.Log("Trying to send command to server", Debug);
     implementation_->tcp_client_->Send(Command::Load);
     implementation_->tcp_client_->Send(
-        bin_name, Unite(process_config.args, ';'),
+        bin_name, process_config.args.size(),
         process_config.launch_on_boot, process_config.term_rerun,
         process_config.time_to_stop.has_value()
             ? process_config.time_to_stop.value().count()
             : 0,
         wait_for_run);
+    for (const auto& arg : process_config.args) {
+      implementation_->tcp_client_->Send(arg);
+    }
     logger.Log("Command send to server", Debug);
 
     logger.Log("Trying to receive answer from server", Debug);
