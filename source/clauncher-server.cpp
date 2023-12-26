@@ -562,14 +562,13 @@ void LauncherServer::Implementation::GetConfig() noexcept {
   } else {
     logger.Log("File is opened", Debug);
   }
-  if (config.peek() == std::ifstream::traits_type::eof()) {
-    logger.Log("File is empty", Warning);
-    config.close();
-    return;
-  }
+
+  int table_size;
+  config >> table_size;
+  logger.Log("Table size got: " + std::to_string(table_size), Debug);
 
   logger.Log("Getting configs from file", Debug);
-  do {
+  for (int i = 0; i < table_size; ++i) {
     std::string bin_name;
     ProcessConfig info;
     config >> bin_name;
@@ -592,7 +591,7 @@ void LauncherServer::Implementation::GetConfig() noexcept {
     }
 
     load_config_.insert({std::move(bin_name), std::move(info)});
-  } while (!config.eof());
+  }
   logger.Log("Config got, closing file", Debug);
 
   config.close();
@@ -608,6 +607,9 @@ void LauncherServer::Implementation::SaveConfig() const noexcept {
     logger.Log("Error while opening file", Warning);
     return;
   }
+
+  logger.Log("Saving table size: " + std::to_string(load_config_.size()), Debug);
+  config << load_config_.size() << "\n";
 
   logger.Log("Saving configs to file", Debug);
   for (const auto& [bin_name, process] : load_config_) {
