@@ -78,6 +78,7 @@ struct LauncherServer::Implementation {
   void PrCtrlMain() noexcept;
   bool IsPidAvailable(int pid) const noexcept;
   std::optional<int> GetPid(const std::string& bin_name) noexcept;
+  bool IsRunning(const std::string& bin_name) noexcept;
 
   static const int kNumAMethods = 5;
   typedef void (Implementation::*MethodPtr)(TCP::TcpServer::ClientConnection);

@@ -49,7 +49,8 @@ class LServer : public Logger {
     PrCtrlToTerm,
     PrCtrlMain,
     IsPidAvail,
-    GetPid
+    GetPid,
+    IsRunning
   };
   LServer(LAction action, logging_foo logger);
 
@@ -59,7 +60,7 @@ class LServer : public Logger {
  private:
   LAction action_;
   std::string GetID() const override;
-  static int64_t calls[23];
+  static int64_t calls[24];
 };
 
 class LClient : public Logger {

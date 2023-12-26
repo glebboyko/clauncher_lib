@@ -69,6 +69,8 @@ std::string LServer::GetAction() const {
       return "PROCESS RUNNING CHECKER";
     case GetPid:
       return "PROCESS PID GETTER";
+    case IsRunning:
+      return "PROCESS RUNNING CHECKER";
     default:
       return "CANNOT RECOGNIZE ACTION";
   }

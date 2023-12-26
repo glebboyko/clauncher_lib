@@ -435,6 +435,26 @@ std::optional<int> LauncherServer::Implementation::GetPid(
 
   return pid;
 }
+bool LauncherServer::Implementation::IsRunning(
+    const std::string& bin_name) noexcept {
+  LServer l_server(LServer::IsRunning, logger_);
+  Logger& logger = l_server;
+  logger.Log("Process: " + bin_name, Debug);
+
+  logger.Log("Locking main and run mutexes", Debug);
+  pr_main_m_.lock();
+  pr_to_run_m_.lock();
+  logger.Log("Locked main and run mutexes. Getting result", Debug);
+  bool is_running =
+      processes_.contains(bin_name) || processes_to_run_.contains(bin_name);
+
+  logger.Log("Result got: " + std::to_string(is_running), Debug);
+  pr_to_run_m_.unlock();
+  pr_main_m_.unlock();
+  logger.Log("Unlocked run and main mutexes", Debug);
+
+  return is_running;
+}
 
 /*------------------------- constructor / destructor -------------------------*/
 LauncherServer::LauncherServer(int port, const std::string& config_file,
@@ -997,8 +1017,8 @@ void LauncherServer::Implementation::AIsRunning(
   tcp_server_.Receive(client, bin_name);
   logger.Log("Process name received. Getting PID", Debug);
 
-  bool result = GetPid(bin_name).has_value();
-  logger.Log("Status (PID) is got. Sending to client", Debug);
+  bool result = IsRunning(bin_name);
+  logger.Log("Status is got. Sending to client", Debug);
   tcp_server_.Send(client, result);
   logger.Log("Result sent to client, success", Info);
 }
