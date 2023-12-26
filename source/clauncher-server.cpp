@@ -115,11 +115,11 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
               Info);
           processes_.erase(main_iter);
           if (deleter.term_status != nullptr && !deleter.semaphore_to_delete) {
-            logger.Log("Runner is waiting for result", Info);
+            logger.Log("Terminator is waiting for result", Info);
             deleter.is_ordinary = true;
             deleter.term_status->release();
           } else {
-            logger.Log("Runner is not waiting for result", Debug);
+            logger.Log("Terminator is not waiting for result", Debug);
           }
         } else {  // after checking required
           deleter.term_sent = std::chrono::system_clock::now();
@@ -137,11 +137,11 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
                      Info);
           processes_.erase(main_iter);
           if (deleter.term_status != nullptr) {
-            logger.Log("Runner is waiting for result", Info);
+            logger.Log("Terminator is waiting for result", Info);
             deleter.is_ordinary = true;
             deleter.term_status->release();
           } else {
-            logger.Log("Runner is not waiting for result", Debug);
+            logger.Log("Terminator is not waiting for result", Debug);
           }
         } else {  // is not terminated
           logger.Log("Process has not terminated", Info);
@@ -154,11 +154,11 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
             kill(main_iter->second.pid, SIGKILL);
             processes_.erase(main_iter);
             if (deleter.term_status != nullptr) {
-              logger.Log("Runner is waiting for result", Info);
+              logger.Log("Terminator is waiting for result", Info);
               deleter.is_ordinary = false;
               deleter.term_status->release();
             } else {
-              logger.Log("Runner is not waiting for result", Debug);
+              logger.Log("Terminator is not waiting for result", Debug);
             }
           }  // else skip
         }
@@ -166,9 +166,33 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
         logger.Log("Termination timer is not set", Debug);
       }
     } else {
-      logger.Log("Process has already been terminated", Debug);
+      logger.Log("Main table does not contain process", Info);
+
+      logger.Log("Locking run mutex", Debug);
+      pr_to_run_m_.lock();
+      logger.Log("Run mutex locked", Debug);
+
+      if (processes_to_run_.contains(bin_name) &&
+          processes_to_run_[bin_name].info.pid == 0) {
+        logger.Log("Process has not pid and located in Run table. Erasing",
+                   Info);
+        processes_to_run_.erase(bin_name);
+        if (deleter.term_status != nullptr) {
+          logger.Log("Terminator is waiting for result", Debug);
+          deleter.is_ordinary = true;
+          deleter.term_status->release();
+        } else {
+          logger.Log("Terminator is not waiting fir result", Debug);
+        }
+      } else if (processes_to_run_.contains(bin_name)) {
+        logger.Log("Process has got pid and located in Run table. Skip", Info);
+      }
+
+      pr_to_run_m_.unlock();
+      logger.Log("Unlocked run mutex", Debug);
     }
-    if (!processes_.contains(bin_name) &&
+    if ((!processes_.contains(bin_name) &&
+         !processes_to_run_.contains(bin_name)) &&
         (deleter.term_status == nullptr || deleter.semaphore_to_delete)) {
       if (deleter.semaphore_to_delete) {
         delete deleter.term_status;
