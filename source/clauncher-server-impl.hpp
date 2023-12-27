@@ -57,7 +57,7 @@ struct LauncherServer::Implementation {
 
   bool RunProcess(std::string&& bin_name, ProcessConfig&& process,
                   bool wait_for_run = false) noexcept;
-  Stopper::TermStatus StopProcess(const std::string& bin_name,
+  TermStatus StopProcess(const std::string& bin_name,
                                   bool wait_for_term = false) noexcept;
 
   // atomic operations //

@@ -946,7 +946,7 @@ void LauncherServer::Implementation::AStop(
   tcp_server_.Receive(client, bin_name, should_wait);
 
   logger.Log("Config received. Terminating process", Debug);
-  bool result = StopProcess(bin_name, should_wait);
+  int result = StopProcess(bin_name, should_wait);
 
   logger.Log("Process has been terminated, sending result to client", Debug);
   tcp_server_.Send(client, result);
