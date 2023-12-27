@@ -31,7 +31,7 @@ add_library(${PROJECT_NAME}
         source/clauncher-supply.cpp)
 add_library(${PROJECT_NAME}_lib ALIAS ${PROJECT_NAME})
 
-add_executable(${PROJECT_NAME}_agent source/launch_agent.cpp)
+add_executable(${PROJECT_NAME}_agent_exec source/launch_agent.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CTCP_LIB})
-target_link_libraries(${PROJECT_NAME}_agent PRIVATE ${CTCP_LIB})
+target_link_libraries(${PROJECT_NAME}_agent_exec PRIVATE ${CTCP_LIB})
