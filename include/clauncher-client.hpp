@@ -15,7 +15,7 @@ class LauncherClient {
 
   bool LoadProcess(const std::string& bin_name,
                    const ProcessConfig& process_config, bool wait_for_run);
-  bool StopProcess(const std::string& bin_name, bool wait_for_stop);
+  TermStatus StopProcess(const std::string& bin_name, bool wait_for_stop);
   bool ReRunProcess(const std::string& bin_name, bool wait_for_rerun);
   bool IsProcessRunning(const std::string& bin_name);
   std::optional<int> GetProcessPid(const std::string& bin_name);

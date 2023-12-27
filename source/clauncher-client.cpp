@@ -52,8 +52,8 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
     logger.Log("Trying to send command to server", Debug);
     implementation_->tcp_client_->Send(Command::Load);
     implementation_->tcp_client_->Send(
-        bin_name, process_config.args.size(),
-        process_config.launch_on_boot, process_config.term_rerun,
+        bin_name, process_config.args.size(), process_config.launch_on_boot,
+        process_config.term_rerun,
         process_config.time_to_stop.has_value()
             ? process_config.time_to_stop.value().count()
             : 0,
@@ -78,8 +78,8 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
   }
 }
 
-bool LauncherClient::StopProcess(const std::string& bin_name,
-                                 bool wait_for_stop) {
+TermStatus LauncherClient::StopProcess(const std::string& bin_name,
+                                       bool wait_for_stop) {
   LClient l_client(LClient::StopProcess, implementation_->logger_);
   Logger& logger = l_client;
   logger.Log("Trying to stop process: " + bin_name, Info);
@@ -94,10 +94,10 @@ bool LauncherClient::StopProcess(const std::string& bin_name,
     logger.Log("Command sent to server", Debug);
 
     logger.Log("Trying to receive answer from server", Debug);
-    bool result;
+    int result;
     implementation_->tcp_client_->Receive(result);
     logger.Log("Answer from server received: " + std::to_string(result), Info);
-    return result;
+    return static_cast<TermStatus>(result);
   } catch (TCP::TcpException& exception) {
     logger.Log(std::string("Caught exception: ") + exception.what(), Warning);
     if (exception.GetType() == TCP::TcpException::ConnectionBreak) {
