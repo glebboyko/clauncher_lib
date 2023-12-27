@@ -27,17 +27,24 @@ struct LauncherServer::Implementation {
     std::optional<std::chrono::time_point<std::chrono::system_clock>> last_run =
         {};
 
-    std::binary_semaphore* run_status = nullptr;
-    bool semaphore_to_delete = false;
+    int* run_status = nullptr;
+    std::binary_semaphore* run_semaphore = nullptr;
   };
   struct Stopper {
+    enum TermStatus {
+      NoCheck,
+      SigTerm,
+      SigKill,
+      AlreadyTerminating,
+      NotRun,
+      NotRunning,
+      Error
+    };
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         term_sent = {};
 
-    bool is_ordinary = false;
-
-    std::binary_semaphore* term_status = nullptr;
-    bool semaphore_to_delete = false;
+    int* term_status = nullptr;
+    std::binary_semaphore* term_semaphore = nullptr;
   };
 
   struct Client {
@@ -59,8 +66,8 @@ struct LauncherServer::Implementation {
 
   bool RunProcess(std::string&& bin_name, ProcessConfig&& process,
                   bool wait_for_run = false) noexcept;
-  bool StopProcess(const std::string& bin_name,
-                   bool wait_for_term = false) noexcept;
+  Stopper::TermStatus StopProcess(const std::string& bin_name,
+                                  bool wait_for_term = false) noexcept;
 
   // atomic operations //
   void ALoad(TCP::TcpServer::ClientConnection client);
@@ -73,8 +80,12 @@ struct LauncherServer::Implementation {
 
   // secondary functions //
   void SendRun(const std::string& name, const ProcessConfig& config) noexcept;
+
   void PrCtrlToRun() noexcept;
   void PrCtrlToTerm() noexcept;
+  void ProcessChangeSend(int status, std::binary_semaphore*&, int*&,
+                         Logger&) noexcept;
+
   void PrCtrlMain() noexcept;
   bool IsPidAvailable(int pid) const noexcept;
   std::optional<int> GetPid(const std::string& bin_name) noexcept;

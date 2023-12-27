@@ -44,28 +44,17 @@ void LauncherServer::Implementation::PrCtrlToRun() noexcept {
     auto& [bin_name, runner] = *iter;
     logger.Log("Processing " + bin_name, Info);
     if (runner.info.pid != 0) {  // process has already sent config
-      logger.Log("Process has already sent config", Debug);
-      if (runner.last_run.has_value()) {  // process has not been moved yet
-        processes_.insert({bin_name, runner.info});
-        runner.last_run = {};  // moved flag
-        logger.Log("Moving process to main table", Info);
-      } else {
-        logger.Log("Process has already moved to main table", Info);
-      }
-      if (runner.run_status == nullptr ||
-          runner.semaphore_to_delete) {  // runner is not waiting for result
-        if (runner.semaphore_to_delete) {
-          delete runner.run_status;
-        }
-        iter = processes_to_run_.erase(iter);
-        logger.Log(
-            "Runner is not waiting for result. Erasing process in run table",
-            Info);
-        continue;
-      }
-      logger.Log("Runner is waiting for result", Debug);
-    } else if (runner.last_run
-                   .has_value()) {  // process run but has not sent config
+      logger.Log("Process has already sent config. Moving to main table", Info);
+      processes_.insert({bin_name, runner.info});
+
+      ProcessChangeSend(true, runner.run_semaphore, runner.run_status, logger);
+
+      logger.Log("Process successfully run. Erasing from Run table", Info);
+      iter = processes_to_run_.erase(iter);
+      continue;
+    }
+
+    if (runner.last_run.has_value()) {  // process run but has not sent config
       logger.Log("Process is running but has not sent config", Info);
       if (std::chrono::system_clock::now() - runner.last_run.value() >=
           kWaitToRerun) {      // is timeout
@@ -75,6 +64,7 @@ void LauncherServer::Implementation::PrCtrlToRun() noexcept {
         logger.Log("Launching not timeout", Debug);
       }
     }
+
     if (is_active_ && runner.info.pid == 0 &&
         !runner.last_run.has_value()) {  // run flag set
       runner.last_run = std::chrono::system_clock::now();
@@ -93,6 +83,7 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
 
   logger.Log("Locking mutex", Debug);
   pr_main_m_.lock();
+  pr_to_run_m_.unlock();
   pr_to_term_m_.lock();
   logger.Log("Mutex locked. Entering loop", Debug);
 
@@ -101,127 +92,107 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
     auto& [bin_name, deleter] = *iter;
     logger.Log("Processing " + bin_name, Info);
 
-    if (processes_.contains(bin_name)) {  // requires to terminate
-      logger.Log("Process is required to be terminated", Info);
+    if (processes_.contains(bin_name)) {  // Main table contains process
+      logger.Log("Main table contains process", Info);
       auto main_iter = processes_.find(bin_name);
-      if (!deleter.term_sent.has_value()) {  // ordinary termination
-        logger.Log("Ordinary termination. Sending SIGTERM signal", Info);
+      if (!IsPidAvailable(
+              processes_[bin_name].pid)) {  // Process is not running
+        logger.Log("Process has already terminated. Erasing from main talbe",
+                   Info);
+        processes_.erase(main_iter);
+        ProcessChangeSend(Stopper::SigTerm, deleter.term_semaphore,
+                          deleter.term_status, logger);
+        logger.Log("Erasing from Term table", Debug);
+        iter = processes_to_terminate_.erase(iter);
+        continue;
+      }
+      // Process is running
+      logger.Log("Process is running", Info);
+
+      if (!deleter.term_sent.has_value()) {  // SigTerm has not been sent yet
+        logger.Log("SigTerm signal has not been sent yet. Sending SIGTERM",
+                   Info);
         kill(main_iter->second.pid, SIGTERM);
         if (!main_iter->second.config.time_to_stop
-                 .has_value()) {  // no after checking required
+                 .has_value()) {  // no checking required
           logger.Log(
-              "Process does not require termination checking. Erasing from "
-              "main table",
+              "Checking termination is not required. Erasing from Main talbe",
               Info);
           processes_.erase(main_iter);
-          if (deleter.term_status != nullptr && !deleter.semaphore_to_delete) {
-            logger.Log("Terminator is waiting for result", Info);
-            deleter.is_ordinary = true;
-            deleter.term_status->release();
-          } else {
-            logger.Log("Terminator is not waiting for result", Debug);
-          }
-        } else {  // after checking required
-          deleter.term_sent = std::chrono::system_clock::now();
-          logger.Log("Process requires termination checking. Setting timer",
-                     Info);
+          ProcessChangeSend(Stopper::NoCheck, deleter.term_semaphore,
+                            deleter.term_status, logger);
+          logger.Log("Erasing from Term table", Debug);
+          iter = processes_to_terminate_.erase(iter);
+          continue;
         }
-      } else {
-        logger.Log("Termination timer has already been set", Debug);
+        logger.Log("Termination checker is required. Setting timer", Info);
+        deleter.term_sent = std::chrono::system_clock::now();
+      } else if (std::chrono::system_clock::now() - deleter.term_sent.value() >
+                 main_iter->second.config.time_to_stop.value()) {  // timeout
+        logger.Log(
+            "SigTerm signal has already been sent. Timer timeout. Sending "
+            "SIGKILL. Erasing from Main table",
+            Info);
+        kill(main_iter->second.pid, SIGKILL);
+        processes_.erase(main_iter);
+        ProcessChangeSend(Stopper::SigKill, deleter.term_semaphore,
+                          deleter.term_status, logger);
+        logger.Log("Erasing from Term table", Debug);
+        iter = processes_to_terminate_.erase(iter);
+        continue;
       }
-
-      if (deleter.term_sent.has_value()) {  // termination checker
-        logger.Log("Termination timer is set", Info);
-        if (!IsPidAvailable(main_iter->second.pid)) {  // is terminated
-          logger.Log("Process has already terminated. Erasing from main table",
-                     Info);
-          processes_.erase(main_iter);
-          if (deleter.term_status != nullptr) {
-            logger.Log("Terminator is waiting for result", Info);
-            deleter.is_ordinary = true;
-            deleter.term_status->release();
-          } else {
-            logger.Log("Terminator is not waiting for result", Debug);
-          }
-        } else {  // is not terminated
-          logger.Log("Process has not terminated", Info);
-          if (std::chrono::system_clock::now() - deleter.term_sent.value() >
-              main_iter->second.config.time_to_stop) {  // is timeout
-            logger.Log(
-                "Termination timeout. Sending SIGKILL signal. Erasing from "
-                "main table",
-                Info);
-            kill(main_iter->second.pid, SIGKILL);
-            processes_.erase(main_iter);
-            if (deleter.term_status != nullptr) {
-              logger.Log("Terminator is waiting for result", Info);
-              deleter.is_ordinary = false;
-              deleter.term_status->release();
-            } else {
-              logger.Log("Terminator is not waiting for result", Debug);
-            }
-          }  // else skip
-        }
-      } else {
-        logger.Log("Termination timer is not set", Debug);
+      // not timeout
+      logger.Log("Timer is not timeout. Moving to next process", Info);
+    } else if (processes_to_run_.contains(
+                   bin_name)) {  // Run table contains process
+      logger.Log("Run table contains process", Info);
+      auto run_iter = processes_to_run_.find(bin_name);
+      if (run_iter->second.info.pid == 0) {  // Process has no PID
+        logger.Log("Process has no PID. Erasing from Run table", Info);
+        processes_to_run_.erase(run_iter);
+        ProcessChangeSend(Stopper::NotRun, deleter.term_semaphore,
+                          deleter.term_status, logger);
+        logger.Log("Erasing process from Term table", Debug);
+        iter = processes_to_terminate_.erase(iter);
+        continue;
       }
-    } else {
-      logger.Log("Main table does not contain process", Info);
-
-      logger.Log("Locking run mutex", Debug);
-      pr_to_run_m_.lock();
-      logger.Log("Run mutex locked", Debug);
-
-      if (processes_to_run_.contains(bin_name) &&
-          processes_to_run_[bin_name].info.pid == 0) {
-        logger.Log("Process has not pid and located in Run table. Erasing",
-                   Info);
-        processes_to_run_.erase(bin_name);
-        if (deleter.term_status != nullptr) {
-          logger.Log("Terminator is waiting for result", Debug);
-          deleter.is_ordinary = true;
-          deleter.term_status->release();
-        } else {
-          logger.Log("Terminator is not waiting fir result", Debug);
-        }
-      } else if (processes_to_run_.contains(bin_name)) {
-        logger.Log("Process has got pid and located in Run table. Skip", Info);
-      } else {
-        logger.Log("Process has already been terminated", Info);
-        if (deleter.term_status != nullptr) {
-          logger.Log("Terminator is waiting for result", Debug);
-          deleter.is_ordinary = true;
-          deleter.term_status->release();
-        } else {
-          logger.Log("Terminator is not waiting fir result", Debug);
-        }
-      }
-
-      pr_to_run_m_.unlock();
-      logger.Log("Unlocked run mutex", Debug);
-    }
-    if ((!processes_.contains(bin_name) &&
-         !processes_to_run_.contains(bin_name)) &&
-        (deleter.term_status == nullptr || deleter.semaphore_to_delete)) {
-      if (deleter.semaphore_to_delete) {
-        delete deleter.term_status;
-      }
-      logger.Log(
-          "Process has been terminated, runner is not waiting for result. "
-          "Erasing from termination table",
-          Info);
+      logger.Log("Process has got PID. Moving to next process", Info);
+    } else {  // No table contains process
+      logger.Log("Not table contains process", Info);
+      ProcessChangeSend(Stopper::NotRunning, deleter.term_semaphore,
+                        deleter.term_status, logger);
+      logger.Log("Erasing process from Term table", Debug);
       iter = processes_to_terminate_.erase(iter);
-    } else {
-      logger.Log("Process cannot be erased from termination table", Debug);
-      ++iter;
+      continue;
     }
+    ++iter;
   }
 
   logger.Log("Unlocking mutex", Debug);
   pr_to_term_m_.unlock();
+  pr_to_run_m_.unlock();
   pr_main_m_.unlock();
   logger.Log("Function finish", Info);
 }
+
+void LauncherServer::Implementation::ProcessChangeSend(
+    int status, std::binary_semaphore*& semaphore, int*& status_ptr,
+    LNCR::Logger& logger) noexcept {
+  if (semaphore == nullptr) {
+    logger.Log("Nothing is waiting for result", Debug);
+    return;
+  }
+
+  logger.Log("Something is waiting for result, sending result", Info);
+  *status_ptr = status;
+  semaphore->release();
+
+  status_ptr = nullptr;
+  semaphore = nullptr;
+
+  logger.Log("Result sent", Debug);
+}
+
 void LauncherServer::Implementation::PrCtrlMain() noexcept {
   LServer l_server(LServer::PrCtrlMain, logger_);
   Logger& logger = l_server;
@@ -321,10 +292,15 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
   load_conf_m_.unlock();
   logger.Log("Mutex load unlocked", Debug);
 
-  std::binary_semaphore* semaphore =
-      wait_for_run ? new std::binary_semaphore(0) : nullptr;
+  std::binary_semaphore* semaphore = nullptr;
+  int* run_status = nullptr;
+  if (wait_for_run) {
+    semaphore = new std::binary_semaphore(0);
+    run_status = new int;
+  }
   Runner runner = {.info = {.config = std::move(process)},
-                   .run_status = semaphore};
+                   .run_status = run_status,
+                   .run_semaphore = semaphore};
   logger.Log("Inserting process into run table", Debug);
   auto inserted =
       processes_to_run_.insert({std::move(bin_name), std::move(runner)});
@@ -332,18 +308,33 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
   pr_to_run_m_.unlock();
   logger.Log("Mutex run unlocked", Debug);
 
+  if (!inserted.second) {
+    if (wait_for_run) {
+      delete semaphore;
+      delete run_status;
+    }
+    logger.Log("Run table has already contained process. Term exec", Info);
+    return false;
+  } else {
+    logger.Log("Process inserted to run table", Debug);
+  }
+
+  bool result = true;
   if (wait_for_run) {
     logger.Log("Runner is waiting for running", Info);
     semaphore->acquire();
-    inserted.first->second.semaphore_to_delete = true;
+    result = *run_status;
+    delete semaphore;
+    delete run_status;
     logger.Log("Process is running", Info);
   } else {
     logger.Log("Runner is not waiting for running", Info);
   }
-  return true;
+  return result;
 }
-bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
-                                                 bool wait_for_term) noexcept {
+LauncherServer::Implementation::Stopper::TermStatus
+LauncherServer::Implementation::StopProcess(const std::string& bin_name,
+                                            bool wait_for_term) noexcept {
   LServer l_server(LServer::StopProcess, logger_);
   Logger& logger = l_server;
   logger.Log("Process: " + bin_name, Info);
@@ -362,9 +353,13 @@ bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
   load_conf_m_.unlock();
   logger.Log("Load mutex unlocked", Debug);
 
-  std::binary_semaphore* semaphore =
-      wait_for_term ? new std::binary_semaphore(0) : nullptr;
-  Stopper stopper = {.term_status = semaphore};
+  std::binary_semaphore* semaphore = nullptr;
+  int* term_status = nullptr;
+  if (wait_for_term) {
+    semaphore = new std::binary_semaphore(0);
+    term_status = new int;
+  }
+  Stopper stopper = {.term_status = term_status, .term_semaphore = semaphore};
 
   logger.Log("Locking mutex", Debug);
   pr_to_term_m_.lock();
@@ -377,22 +372,25 @@ bool LauncherServer::Implementation::StopProcess(const std::string& bin_name,
   logger.Log("Mutex unlocked", Debug);
 
   if (!iter.second) {
-    if (semaphore != nullptr) {
+    if (wait_for_term) {
       delete semaphore;
+      delete term_status;
     }
     logger.Log("Term table has already contained process. Term exec", Info);
-    return true;
+    return Stopper::AlreadyTerminating;
   } else {
     logger.Log("Process inserted to term table", Debug);
   }
 
-  bool result = true;
+  Stopper::TermStatus result = Stopper::NoCheck;
 
   if (wait_for_term) {
     logger.Log("Terminator is waiting for terminating", Info);
     semaphore->acquire();
-    result = iter.first->second.is_ordinary;
-    iter.first->second.semaphore_to_delete = true;
+    result = static_cast<Stopper::TermStatus>(*term_status);
+
+    delete semaphore;
+    delete term_status;
     logger.Log("Process is terminated with " + std::to_string(result), Info);
   } else {
     logger.Log("Terminator is not waiting for terminating", Info);
@@ -465,7 +463,8 @@ bool LauncherServer::Implementation::IsRunning(
   return is_running;
 }
 
-/*------------------------- constructor / destructor -------------------------*/
+/*------------------------- constructor / destructor
+ * -------------------------*/
 LauncherServer::LauncherServer(int port, const std::string& config_file,
                                const std::string& agent_binary,
                                logging_foo logging_f) {
@@ -553,30 +552,13 @@ LauncherServer::~LauncherServer() {
 
   logger.Log("Deleting existing semaphores", Debug);
   for (auto& [bin_name, runner] : implementation_->processes_to_run_) {
-    if (runner.run_status != nullptr && !runner.semaphore_to_delete) {
-      runner.run_status->try_acquire();
-      runner.run_status->release();
-    }
+    implementation_->ProcessChangeSend(false, runner.run_semaphore,
+                                       runner.run_status, logger);
   }
   for (auto& [bin_name, stopper] : implementation_->processes_to_terminate_) {
-    if (stopper.term_status != nullptr && !stopper.semaphore_to_delete) {
-      stopper.term_status->try_acquire();
-      stopper.term_status->release();
-    }
-  }
-  for (auto& [bin_name, runner] : implementation_->processes_to_run_) {
-    if (runner.run_status != nullptr) {
-      while (!runner.semaphore_to_delete) {
-      }
-      delete runner.run_status;
-    }
-  }
-  for (auto& [bin_name, stopper] : implementation_->processes_to_terminate_) {
-    if (stopper.term_status != nullptr) {
-      while (!stopper.semaphore_to_delete) {
-      }
-      delete stopper.term_status;
-    }
+    implementation_->ProcessChangeSend(Implementation::Stopper::Error,
+                                       stopper.term_semaphore,
+                                       stopper.term_status, logger);
   }
   logger.Log("All semaphores deleted", Debug);
 
@@ -691,7 +673,8 @@ void LauncherServer::Implementation::SaveConfig() const noexcept {
   config.close();
 }
 
-/*----------------------------- thread functions -----------------------------*/
+/*----------------------------- thread functions
+ * -----------------------------*/
 void LauncherServer::Implementation::Accepter() noexcept {
   LServer l_server(LServer::Accepter, logger_);
   Logger& logger = l_server;
@@ -760,7 +743,8 @@ void LauncherServer::Implementation::Accepter() noexcept {
 
           if (!to_run && error == 0) {  // if nowhere
             logger.Log(
-                "Run table does not contain process, process is in init mode. "
+                "Run table does not contain process, process is in init "
+                "mode. "
                 "Sending kill signal",
                 Warning);
             kill(pid, SIGKILL);
@@ -769,14 +753,8 @@ void LauncherServer::Implementation::Accepter() noexcept {
                        Info);
             auto& process = processes_to_run_[process_name];
             process.info.pid = pid;  // set pid : "successful run" flag
-            if (process.run_status != nullptr &&
-                !process.semaphore_to_delete) {  // check if run process wait
-                                                 // for result
-              logger.Log("Runner is waiting. Releasing", Info);
-              process.run_status->release();
-            } else {
-              logger.Log("Runner is not waiting", Debug);
-            }
+            ProcessChangeSend(true, process.run_semaphore, process.run_status,
+                              logger);
           } else {  // error mode
             // do nothing because it will be processed by ctrl
             logger.Log("Process is in error mode: " + std::to_string(error),
@@ -924,7 +902,8 @@ void LauncherServer::Implementation::ClientCommunication(
   delete client;
 }
 
-/*---------------------------- atomic operations -----------------------------*/
+/*---------------------------- atomic operations
+ * -----------------------------*/
 void LauncherServer::Implementation::ALoad(
     TCP::TcpServer::ClientConnection client) {
   LServer l_server(LServer::ALoad, logger_);
