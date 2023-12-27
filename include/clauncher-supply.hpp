@@ -107,4 +107,14 @@ struct ProcessConfig {
 enum SenderStatus { Agent, Client };
 enum Command { Load, Stop, Rerun, IsRunning, GetPid, GetConfig, SetConfig };
 
+enum TermStatus {
+  NoCheck,
+  SigTerm,
+  SigKill,
+  AlreadyTerminating,
+  NotRun,
+  NotRunning,
+  TermError
+};
+
 }  // namespace LNCR

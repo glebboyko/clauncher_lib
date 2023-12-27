@@ -100,8 +100,8 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
         logger.Log("Process has already terminated. Erasing from main talbe",
                    Info);
         processes_.erase(main_iter);
-        ProcessChangeSend(Stopper::SigTerm, deleter.term_semaphore,
-                          deleter.term_status, logger);
+        ProcessChangeSend(SigTerm, deleter.term_semaphore, deleter.term_status,
+                          logger);
         logger.Log("Erasing from Term table", Debug);
         iter = processes_to_terminate_.erase(iter);
         continue;
@@ -119,7 +119,7 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
               "Checking termination is not required. Erasing from Main talbe",
               Info);
           processes_.erase(main_iter);
-          ProcessChangeSend(Stopper::NoCheck, deleter.term_semaphore,
+          ProcessChangeSend(NoCheck, deleter.term_semaphore,
                             deleter.term_status, logger);
           logger.Log("Erasing from Term table", Debug);
           iter = processes_to_terminate_.erase(iter);
@@ -135,8 +135,8 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
             Info);
         kill(main_iter->second.pid, SIGKILL);
         processes_.erase(main_iter);
-        ProcessChangeSend(Stopper::SigKill, deleter.term_semaphore,
-                          deleter.term_status, logger);
+        ProcessChangeSend(SigKill, deleter.term_semaphore, deleter.term_status,
+                          logger);
         logger.Log("Erasing from Term table", Debug);
         iter = processes_to_terminate_.erase(iter);
         continue;
@@ -150,8 +150,8 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
       if (run_iter->second.info.pid == 0) {  // Process has no PID
         logger.Log("Process has no PID. Erasing from Run table", Info);
         processes_to_run_.erase(run_iter);
-        ProcessChangeSend(Stopper::NotRun, deleter.term_semaphore,
-                          deleter.term_status, logger);
+        ProcessChangeSend(NotRun, deleter.term_semaphore, deleter.term_status,
+                          logger);
         logger.Log("Erasing process from Term table", Debug);
         iter = processes_to_terminate_.erase(iter);
         continue;
@@ -159,8 +159,8 @@ void LauncherServer::Implementation::PrCtrlToTerm() noexcept {
       logger.Log("Process has got PID. Moving to next process", Info);
     } else {  // No table contains process
       logger.Log("Not table contains process", Info);
-      ProcessChangeSend(Stopper::NotRunning, deleter.term_semaphore,
-                        deleter.term_status, logger);
+      ProcessChangeSend(NotRunning, deleter.term_semaphore, deleter.term_status,
+                        logger);
       logger.Log("Erasing process from Term table", Debug);
       iter = processes_to_terminate_.erase(iter);
       continue;
@@ -332,9 +332,8 @@ bool LauncherServer::Implementation::RunProcess(std::string&& bin_name,
   }
   return result;
 }
-LauncherServer::Implementation::Stopper::TermStatus
-LauncherServer::Implementation::StopProcess(const std::string& bin_name,
-                                            bool wait_for_term) noexcept {
+TermStatus LauncherServer::Implementation::StopProcess(
+    const std::string& bin_name, bool wait_for_term) noexcept {
   LServer l_server(LServer::StopProcess, logger_);
   Logger& logger = l_server;
   logger.Log("Process: " + bin_name, Info);
@@ -377,17 +376,17 @@ LauncherServer::Implementation::StopProcess(const std::string& bin_name,
       delete term_status;
     }
     logger.Log("Term table has already contained process. Term exec", Info);
-    return Stopper::AlreadyTerminating;
+    return AlreadyTerminating;
   } else {
     logger.Log("Process inserted to term table", Debug);
   }
 
-  Stopper::TermStatus result = Stopper::NoCheck;
+  TermStatus result = NoCheck;
 
   if (wait_for_term) {
     logger.Log("Terminator is waiting for terminating", Info);
     semaphore->acquire();
-    result = static_cast<Stopper::TermStatus>(*term_status);
+    result = static_cast<TermStatus>(*term_status);
 
     delete semaphore;
     delete term_status;
@@ -556,8 +555,7 @@ LauncherServer::~LauncherServer() {
                                        runner.run_status, logger);
   }
   for (auto& [bin_name, stopper] : implementation_->processes_to_terminate_) {
-    implementation_->ProcessChangeSend(Implementation::Stopper::Error,
-                                       stopper.term_semaphore,
+    implementation_->ProcessChangeSend(TermError, stopper.term_semaphore,
                                        stopper.term_status, logger);
   }
   logger.Log("All semaphores deleted", Debug);

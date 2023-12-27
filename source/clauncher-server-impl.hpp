@@ -31,15 +31,6 @@ struct LauncherServer::Implementation {
     std::binary_semaphore* run_semaphore = nullptr;
   };
   struct Stopper {
-    enum TermStatus {
-      NoCheck,
-      SigTerm,
-      SigKill,
-      AlreadyTerminating,
-      NotRun,
-      NotRunning,
-      Error
-    };
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         term_sent = {};
 
