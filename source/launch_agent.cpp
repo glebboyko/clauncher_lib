@@ -3,7 +3,7 @@
 #include "tcp-client.hpp"
 #include "clauncher-supply.hpp"
 
-int main(int argc, char** argv) {
+int main(const int argc, char** argv) {
   if (argc < 3) {
     exit(1);
   }
@@ -19,7 +19,15 @@ int main(int argc, char** argv) {
     exit(2);
   }
 
-  execv(argv[2], &(argv[3]));
+  char* args[argc - 1];
+
+  args[0] = argv[2];
+  for (int i = 1; i < argc - 2; ++i) {
+    args[i] = argv[i + 2];
+  }
+  args[argc - 2] = NULL;
+
+  execv(args[0], args);
 
   try {
     TCP::TcpClient tcp_client(0, port, "127.0.0.1");
