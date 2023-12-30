@@ -25,7 +25,7 @@ include_directories(include)
 include_directories(source)
 
 add_library(${PROJECT_NAME}
-        SHARED
+        STATIC
         source/clauncher-server.cpp source/clauncher-server-runner.cpp
         source/clauncher-client.cpp
         source/clauncher-supply.cpp)
