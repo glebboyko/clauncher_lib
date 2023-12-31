@@ -4,34 +4,26 @@ project(clauncher)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS -pthread)
 
-get_filename_component(DIR_INCLUDE . ABSOLUTE DIRECTORY)
-set(${PROJECT_NAME}_DIR ${DIR_INCLUDE}/include PARENT_SCOPE)
+set(LIBS_DIR "${CMAKE_SOURCE_DIR}/external_libs")
 
-set(CTCP_LIB "c_tcp_lib")
-file(GLOB LIB_CONT "source/${CTCP_LIB}/*")
-list(LENGTH LIB_CONT LIB_LENGTH)
+execute_process(COMMAND chmod u+x "${LIBS_DIR}/build_ctcp.sh")
+execute_process(COMMAND "${LIBS_DIR}/build_ctcp.sh" "${LIBS_DIR}/c_tcp_lib" "${LIBS_DIR}/built_libs")
 
-set(MY_GIT_LINK "https://github.com/glebboyko")
-if (LIB_LENGTH EQUAL 0)
-    execute_process(COMMAND git clone "${MY_GIT_LINK}/${CTCP_LIB}.git" "${DIR_INCLUDE}/source/${CTCP_LIB}")
-else ()
-    execute_process(COMMAND git -C "${DIR_INCLUDE}/source/${CTCP_LIB}" pull)
-endif ()
+set(CTCP_LIB "lib_c_tcp.a")
 
-add_subdirectory("source/${CTCP_LIB}/cpp")
-include_directories(${c_tcp_DIR})
+include_directories(include source)
+include_directories(external_libs/c_tcp_lib/cpp/include)
 
-include_directories(include)
-include_directories(source)
+link_directories(external_libs/built_libs)
 
 add_library(${PROJECT_NAME}
         STATIC
         source/clauncher-server.cpp source/clauncher-server-runner.cpp
         source/clauncher-client.cpp
         source/clauncher-supply.cpp)
-add_library(${PROJECT_NAME}_lib ALIAS ${PROJECT_NAME})
-
-add_executable(${PROJECT_NAME}_agent_exec source/launch_agent.cpp)
+add_executable(${PROJECT_NAME}_agent source/launch_agent.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${CTCP_LIB})
-target_link_libraries(${PROJECT_NAME}_agent_exec PRIVATE ${CTCP_LIB})
+target_link_libraries(${PROJECT_NAME}_agent PRIVATE ${CTCP_LIB})
+
+set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "lib_")
