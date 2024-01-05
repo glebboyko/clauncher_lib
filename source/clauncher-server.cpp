@@ -462,8 +462,7 @@ bool LauncherServer::Implementation::IsRunning(
   return is_running;
 }
 
-/*------------------------- constructor / destructor
- * -------------------------*/
+/*------------------------- constructor / destructor -------------------------*/
 LauncherServer::LauncherServer(int port, const std::string& config_file,
                                const std::string& agent_binary,
                                logging_foo logging_f) {
@@ -566,7 +565,7 @@ LauncherServer::~LauncherServer() {
     if (connection.has_value()) {
       logger.Log("Client is running, closing connection", Debug);
       try {
-        implementation_->tcp_server_.CloseConnection(connection.value());
+        connection.value().CloseConnection();
       } catch (std::exception& exception) {
         logger.Log("Multithreading tcp connection error", Warning);
       }
@@ -671,19 +670,17 @@ void LauncherServer::Implementation::SaveConfig() const noexcept {
   config.close();
 }
 
-/*----------------------------- thread functions
- * -----------------------------*/
+/*----------------------------- thread functions -----------------------------*/
 void LauncherServer::Implementation::Accepter() noexcept {
   LServer l_server(LServer::Accepter, logger_);
   Logger& logger = l_server;
   logger.Log("Entering loop", Info);
 
   while (is_active_) {
-    TCP::TcpServer::ClientConnection* connection;
+    TCP::TcpClient* connection;
     try {
       logger.Log("Trying to accept connection", Info);
-      connection =
-          new TCP::TcpServer::ClientConnection(tcp_server_.AcceptConnection());
+      connection = new TCP::TcpClient(tcp_server_.AcceptConnection());
       logger.Log("Connection accepted", Info);
     } catch (TCP::TcpException& exception) {
       if (exception.GetType() == TCP::TcpException::ConnectionBreak) {
@@ -704,7 +701,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
       int send_from;
       try {
         logger.Log("Trying to receive client status", Debug);
-        tcp_server_.Receive(*connection, send_from);
+        connection->Receive(send_from);
         logger.Log("Status received: " +
                        std::string(send_from == SenderStatus::Client ? "Client"
                                                                      : "Agent"),
@@ -713,7 +710,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
           logger.Log("Locking client mutex", Debug);
           clients_m_.lock();
           logger.Log("Client mutex locked", Debug);
-          clients_.push_back({.connection = *connection});
+          clients_.push_back({.connection = std::move(*connection)});
           clients_m_.unlock();
           logger.Log("Client mutex unlocked", Debug);
 
@@ -727,8 +724,8 @@ void LauncherServer::Implementation::Accepter() noexcept {
           std::string process_name;
           int pid;
           int error;
-          tcp_server_.Receive(*connection, process_name, pid, error);
-          tcp_server_.CloseConnection(*connection);
+          connection->Receive(process_name, pid, error);
+          connection->CloseConnection();
           logger.Log("Config received. Connection closed", Debug);
 
           // block tables to use
@@ -765,7 +762,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
         }
       } catch (TCP::TcpException& tcp_exception) {
         if (tcp_exception.GetType() != TCP::TcpException::ConnectionBreak) {
-          tcp_server_.CloseConnection(*connection);
+          connection->CloseConnection();
           logger.Log("Client broke connection. Connection deleted", Warning);
         } else {
           logger.Log("TCP error occurred: " + std::string(tcp_exception.what()),
@@ -782,7 +779,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
     } catch (std::system_error& error) {
       logger.Log("Error occurred while creating thread", Warning);
       logger.Log("Closing connection", Debug);
-      tcp_server_.CloseConnection(*connection);
+      connection->CloseConnection();
       delete connection;
     }
   }
@@ -826,7 +823,7 @@ void LauncherServer::Implementation::Receiver() noexcept {
 
       try {
         logger.Log("Checking client message availability", Debug);
-        if (tcp_server_.IsAvailable(iter->connection.value())) {
+        if (iter->connection->IsAvailable()) {
           logger.Log("Client message is available. Running thread", Info);
           iter->is_running = true;
           iter->curr_communication =
@@ -882,12 +879,12 @@ void LauncherServer::Implementation::ClientCommunication(
   try {
     logger.Log("Trying to receive command", Debug);
     int command;
-    tcp_server_.Receive((*client)->connection.value(), command);
+    (*client)->connection->Receive(command);
     logger.Log("Command received: " + std::to_string(command), Info);
     (this->*method_ptr[command])((*client)->connection.value());
   } catch (TCP::TcpException& tcp_exception) {
     if (tcp_exception.GetType() == TCP::TcpException::ConnectionBreak) {
-      (*client)->connection = {};
+      (*client)->connection.reset();
       logger.Log("Connection broke", Warning);
     } else {
       logger.Log("Error occurred while receiving command: " +
@@ -900,10 +897,8 @@ void LauncherServer::Implementation::ClientCommunication(
   delete client;
 }
 
-/*---------------------------- atomic operations
- * -----------------------------*/
-void LauncherServer::Implementation::ALoad(
-    TCP::TcpServer::ClientConnection client) {
+/*---------------------------- atomic operations -----------------------------*/
+void LauncherServer::Implementation::ALoad(TCP::TcpClient& client) {
   LServer l_server(LServer::ALoad, logger_);
   Logger& logger = l_server;
   logger.Log("Entering loading foo", Info);
@@ -914,11 +909,11 @@ void LauncherServer::Implementation::ALoad(
   int num_of_args;
   int tmp_time_to_stop;
   bool should_wait;
-  tcp_server_.Receive(client, bin_name, num_of_args, config.launch_on_boot,
-                      config.term_rerun, tmp_time_to_stop, should_wait);
+  client.Receive(bin_name, num_of_args, config.launch_on_boot,
+                 config.term_rerun, tmp_time_to_stop, should_wait);
   for (int i = 0; i < num_of_args; ++i) {
     std::string arg;
-    tcp_server_.Receive(client, arg);
+    client.Receive(arg);
     config.args.push_back(arg);
   }
   logger.Log("Config received", Debug);
@@ -930,12 +925,11 @@ void LauncherServer::Implementation::ALoad(
   logger.Log("Running process", Debug);
   bool result = RunProcess(std::move(bin_name), std::move(config), should_wait);
   logger.Log("Process has been run, sending result to client", Debug);
-  tcp_server_.Send(client, result);
+  client.Send(result);
   logger.Log("Result sent to client: " + std::to_string(result), Info);
 }
 
-void LauncherServer::Implementation::AStop(
-    TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::AStop(TCP::TcpClient& client) {
   LServer l_server(LServer::AStop, logger_);
   Logger& logger = l_server;
   logger.Log("Entering stop foo", Info);
@@ -943,18 +937,17 @@ void LauncherServer::Implementation::AStop(
   logger.Log("Receiving process config", Debug);
   std::string bin_name;
   bool should_wait;
-  tcp_server_.Receive(client, bin_name, should_wait);
+  client.Receive(bin_name, should_wait);
 
   logger.Log("Config received. Terminating process", Debug);
   int result = StopProcess(bin_name, should_wait);
 
   logger.Log("Process has been terminated, sending result to client", Debug);
-  tcp_server_.Send(client, result);
+  client.Send(result);
   logger.Log("Result sent to client: " + std::to_string(result), Info);
 }
 
-void LauncherServer::Implementation::ARerun(
-    TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::ARerun(TCP::TcpClient& client) {
   LServer l_server(LServer::ARerun, logger_);
   Logger& logger = l_server;
   logger.Log("Entering Rerun foo", Info);
@@ -962,7 +955,7 @@ void LauncherServer::Implementation::ARerun(
   logger.Log("Receiving process config", Debug);
   std::string bin_name;
   bool should_wait;
-  tcp_server_.Receive(client, bin_name, should_wait);
+  client.Receive(bin_name, should_wait);
 
   logger.Log("Config received. Terminating process. Locking mutex", Debug);
   pr_main_m_.lock();
@@ -974,7 +967,7 @@ void LauncherServer::Implementation::ARerun(
         "to client",
         Debug);
 
-    tcp_server_.Send(client, false);
+    client.Send(false);
     logger.Log("Result sent to client: false. Exit", Info);
     return;
   }
@@ -988,41 +981,39 @@ void LauncherServer::Implementation::ARerun(
   logger.Log("Process terminated. Running process", Debug);
   bool result = RunProcess(std::move(bin_name), std::move(config), should_wait);
   logger.Log("Process has been run. Sending result to client", Debug);
-  tcp_server_.Send(client, result);
+  client.Send(result);
   logger.Log("Result sent to client: " + std::to_string(result), Info);
 }
 
-void LauncherServer::Implementation::AIsRunning(
-    TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::AIsRunning(TCP::TcpClient& client) {
   LServer l_server(LServer::AIsRunning, logger_);
   Logger& logger = l_server;
   logger.Log("Entering IsRunning foo", Info);
 
   logger.Log("Receiving process name", Debug);
   std::string bin_name;
-  tcp_server_.Receive(client, bin_name);
+  client.Receive(bin_name);
   logger.Log("Process name received. Getting PID", Debug);
 
   bool result = IsRunning(bin_name);
   logger.Log("Status is got. Sending to client", Debug);
-  tcp_server_.Send(client, result);
+  client.Send(result);
   logger.Log("Result sent to client, success", Info);
 }
 
-void LauncherServer::Implementation::AGetPid(
-    TCP::TcpServer::ClientConnection client) {
+void LauncherServer::Implementation::AGetPid(TCP::TcpClient& client) {
   LServer l_server(LServer::AGetPid, logger_);
   Logger& logger = l_server;
   logger.Log("Entering GetPid foo", Info);
 
   logger.Log("Receiving process name", Debug);
   std::string bin_name;
-  tcp_server_.Receive(client, bin_name);
+  client.Receive(bin_name);
   logger.Log("Process name received. Getting PID", Debug);
 
   auto result = GetPid(bin_name);
   logger.Log("PID is got. Sending to client", Debug);
-  tcp_server_.Send(client, result.has_value() ? result.value() : 0);
+  client.Send(result.has_value() ? result.value() : 0);
   logger.Log("Result sent to client, success", Info);
 }
 

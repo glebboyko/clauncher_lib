@@ -39,7 +39,7 @@ struct LauncherServer::Implementation {
   };
 
   struct Client {
-    std::optional<TCP::TcpServer::ClientConnection> connection = {};
+    std::optional<TCP::TcpClient> connection = {};
     std::optional<std::thread> curr_communication = {};
     bool is_running = false;
   };
@@ -58,14 +58,14 @@ struct LauncherServer::Implementation {
   bool RunProcess(std::string&& bin_name, ProcessConfig&& process,
                   bool wait_for_run = false) noexcept;
   TermStatus StopProcess(const std::string& bin_name,
-                                  bool wait_for_term = false) noexcept;
+                         bool wait_for_term = false) noexcept;
 
   // atomic operations //
-  void ALoad(TCP::TcpServer::ClientConnection client);
-  void AStop(TCP::TcpServer::ClientConnection client);
-  void ARerun(TCP::TcpServer::ClientConnection client);
-  void AIsRunning(TCP::TcpServer::ClientConnection client);
-  void AGetPid(TCP::TcpServer::ClientConnection client);
+  void ALoad(TCP::TcpClient& client);
+  void AStop(TCP::TcpClient& client);
+  void ARerun(TCP::TcpClient& client);
+  void AIsRunning(TCP::TcpClient& client);
+  void AGetPid(TCP::TcpClient& client);
   // void AGetConfig(TCP::TcpServer::ClientConnection client);
   // void ASetConfig(TCP::TcpServer::ClientConnection client);
 
@@ -83,7 +83,7 @@ struct LauncherServer::Implementation {
   bool IsRunning(const std::string& bin_name) noexcept;
 
   static const int kNumAMethods = 5;
-  typedef void (Implementation::*MethodPtr)(TCP::TcpServer::ClientConnection);
+  typedef void (Implementation::*MethodPtr)(TCP::TcpClient&);
   MethodPtr method_ptr[kNumAMethods] = {
       &Implementation::ALoad, &Implementation::AStop, &Implementation::ARerun,
       &Implementation::AIsRunning, &Implementation::AGetPid};
