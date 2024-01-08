@@ -743,14 +743,20 @@ void LauncherServer::Implementation::Accepter() noexcept {
                 Warning);
             connection->Send(false);
           } else if (error == 0) {  // if it is init mode
-            logger.Log("Run table contains process. Process is in init mode",
-                       Info);
-            connection->Send(true);
-
             auto& process = processes_to_run_[process_name];
-            process.info.pid = pid;  // set pid : "successful run" flag
-            ProcessChangeSend(true, process.run_semaphore, process.run_status,
-                              logger);
+            if (process.info.pid == 0) {
+              logger.Log("Run table contains process. Process is in init mode",
+                         Info);
+
+              connection->Send(true);
+
+              process.info.pid = pid;  // set pid : "successful run" flag
+              ProcessChangeSend(true, process.run_semaphore, process.run_status,
+                                logger);
+            } else {
+              logger.Log("This process is already created", Warning);
+              connection->Send(false);
+            }
           } else {  // error mode
             // do nothing because it will be processed by ctrl
             logger.Log("Process is in error mode: " + std::to_string(error),
