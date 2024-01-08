@@ -5,7 +5,7 @@
 
 int main(const int argc, char** argv) {
   if (argc < 3) {
-    exit(1);
+    return 1;
   }
 
   int port;
@@ -15,8 +15,14 @@ int main(const int argc, char** argv) {
     TCP::TcpClient tcp_client(0, port, "127.0.0.1");
     tcp_client.Send(LNCR::Agent);
     tcp_client.Send(argv[2], getpid(), 0);
+
+    bool should_run;
+    tcp_client.Receive(should_run);
+    if (!should_run) {
+      return 0;
+    }
   } catch (...) {
-    exit(2);
+    return 2;
   }
 
   char* args[argc - 1];
@@ -34,6 +40,6 @@ int main(const int argc, char** argv) {
     tcp_client.Send(LNCR::Agent);
     tcp_client.Send(argv[2], getpid(), errno);
   } catch (...) {
-    exit(3);
+    return 3;
   }
 }
