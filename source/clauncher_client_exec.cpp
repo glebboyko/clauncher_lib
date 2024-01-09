@@ -5,12 +5,11 @@
 
 void PrintUsage() {
   std::cout << "USAGE:\n"
-               "\tCommands:\n"
-               "\t\t- load  >     args    > launch on boot > rerun on term > time to stop > should wait <\n"
-               "\t\t- stop  > should wait <\n"
-               "\t\t- rerun > should wait <\n"
-               "\t\t- check <\n"
-               "\t\t- pid   <\n";
+               "\t- load  >     args    > launch on boot > rerun on term > time to stop > should wait <\n"
+               "\t- stop  > should wait <\n"
+               "\t- rerun > should wait <\n"
+               "\t- check <\n"
+               "\t- pid   <\n";
 }
 
 int main(int argc, char** argv) {
