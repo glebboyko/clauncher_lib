@@ -6,6 +6,7 @@
 void PrintUsage() {
   fprintf(stderr,
           "USAGE:\n"
+          "\t  port\n"
           "\t- load  >     args    > launch on boot > rerun on term > time to stop > should wait <\n"
           "\t- stop  > should wait <\n"
           "\t- rerun > should wait <\n"
