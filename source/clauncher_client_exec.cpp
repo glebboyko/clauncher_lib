@@ -4,18 +4,19 @@
 #include "clauncher-client.hpp"
 
 void PrintUsage() {
-  std::cout << "USAGE:\n"
-               "\t- load  >     args    > launch on boot > rerun on term > time to stop > should wait <\n"
-               "\t- stop  > should wait <\n"
-               "\t- rerun > should wait <\n"
-               "\t- check <\n"
-               "\t- pid   <\n";
+  fprintf(stderr,
+          "USAGE:\n"
+          "\t- load  >     args    > launch on boot > rerun on term > time to stop > should wait <\n"
+          "\t- stop  > should wait <\n"
+          "\t- rerun > should wait <\n"
+          "\t- check <\n"
+          "\t- pid   <\n");
 }
 
 int main(int argc, char** argv) {
   if (argc < 4) {
     PrintUsage();
-    return -2;
+    return 1;
   }
   try {
     LNCR::LauncherClient client(std::stoi(argv[1]));
@@ -26,7 +27,7 @@ int main(int argc, char** argv) {
     if (command == "load") {
       if (argc < 8) {
         PrintUsage();
-        return -2;
+        return 1;
       }
 
       LNCR::ProcessConfig config;
@@ -44,42 +45,48 @@ int main(int argc, char** argv) {
         config.time_to_stop.emplace(time_to_stop);
       }
 
-      return client.LoadProcess(bin_path, config, std::stoi(argv[arg_max + 3]));
+      std::cout << client.LoadProcess(bin_path, config,
+                                      std::stoi(argv[arg_max + 3]));
+      return 0;
     }
     if (command == "stop") {
       if (argc != 5) {
         PrintUsage();
-        return -2;
+        return 1;
       }
-      return client.StopProcess(bin_path, std::stoi(argv[4]));
+      std::cout << client.StopProcess(bin_path, std::stoi(argv[4]));
+      return 0;
     }
     if (command == "rerun") {
       if (argc != 5) {
         PrintUsage();
-        return -2;
+        return 1;
       }
-      return client.ReRunProcess(bin_path, std::stoi(argv[4]));
+      std::cout << client.ReRunProcess(bin_path, std::stoi(argv[4]));
+      return 0;
     }
     if (command == "check") {
       if (argc != 4) {
         PrintUsage();
-        return -2;
+        return 1;
       }
-      return client.IsProcessRunning(bin_path);
+      std::cout << client.IsProcessRunning(bin_path);
+      return 0;
     }
     if (command == "pid") {
       if (argc != 4) {
         PrintUsage();
-        return -2;
+        return 1;
       }
       auto pid = client.GetProcessPid(bin_path);
-      return (pid.has_value() ? pid.value() : 0);
+      std::cout << (pid.has_value() ? pid.value() : 0);
+      return 0;
     }
   } catch (std::exception& error) {
     perror(error.what());
-    return -1;
+    return 2;
   }
 
   PrintUsage();
-  return -3;  // no such command
+  return 3;  // no such command
 }
