@@ -725,8 +725,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
           int pid;
           int error;
           connection->Receive(process_name, pid, error);
-          connection->CloseConnection();
-          logger.Log("Config received. Connection closed", Debug);
+          logger.Log("Config received", Debug);
 
           // block tables to use
           logger.Log("Locking Run mutex", Debug);
@@ -742,14 +741,22 @@ void LauncherServer::Implementation::Accepter() noexcept {
                 "mode. "
                 "Sending kill signal",
                 Warning);
-            kill(pid, SIGKILL);
+            connection->Send(false);
           } else if (error == 0) {  // if it is init mode
-            logger.Log("Run table contains process. Process is in init mode",
-                       Info);
             auto& process = processes_to_run_[process_name];
-            process.info.pid = pid;  // set pid : "successful run" flag
-            ProcessChangeSend(true, process.run_semaphore, process.run_status,
-                              logger);
+            if (process.info.pid == 0) {
+              logger.Log("Run table contains process. Process is in init mode",
+                         Info);
+
+              connection->Send(true);
+
+              process.info.pid = pid;  // set pid : "successful run" flag
+              ProcessChangeSend(true, process.run_semaphore, process.run_status,
+                                logger);
+            } else {
+              logger.Log("This process is already created", Warning);
+              connection->Send(false);
+            }
           } else {  // error mode
             // do nothing because it will be processed by ctrl
             logger.Log("Process is in error mode: " + std::to_string(error),

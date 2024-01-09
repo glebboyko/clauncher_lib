@@ -8,14 +8,17 @@ namespace LNCR {
 LauncherServer* server;
 logging_foo global_logger;
 
+bool signal_caught = false;
+
 void TermHandler(int signal) {
   LRunner l_runner(LRunner::SigHandler, global_logger);
   Logger& logger = l_runner;
 
+  signal_caught = true;
+
   logger.Log("Got signal " + std::to_string(signal), Info);
   delete server;
   logger.Log("Launcher server deleted. Terminating", Info);
-  exit(0);
 }
 
 void SigTermSetup(int signal, void (*handler)(int)) {
@@ -48,8 +51,8 @@ void LauncherRunner(int port, const std::string& config_file,
     return;
   }
 
-  while (true) {
-    sleep(100);
+  while (!signal_caught) {
+    sleep(1);
   }
 }
 
