@@ -9,7 +9,7 @@ cd "${lib_dir}/build" || exit 1
 
 # setting cmake foo
 cmake_foo="cmake"
-if ! command -v cmake & > /dev/null
+if ! command -v cmake &> /dev/null
 then
   cmake_foo="/opt/homebrew/bin/cmake"
 fi
