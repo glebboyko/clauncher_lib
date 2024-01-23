@@ -26,7 +26,7 @@ LauncherClient::LauncherClient(int port, LNCR::logging_foo logging_f) {
   implementation_ = std::unique_ptr<Implementation>(new Implementation{
       .port_ = port,
       .logger_ = logging_f,
-      .tcp_client_ = new TCP::TcpClient(0, port, "127.0.0.1", logging_f)});
+      .tcp_client_ = new TCP::TcpClient("127.0.0.1", port, logging_f)});
   logger.Log("Tcp-client created", Debug);
 
   logger.Log("Trying to send configuration to server", Debug);
@@ -65,7 +65,11 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
 
     logger.Log("Trying to receive answer from server", Debug);
     bool result;
-    implementation_->tcp_client_->Receive(result);
+    if (!implementation_->tcp_client_->Receive(
+            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
+      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
+                              implementation_->logger_);
+    }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return result;
   } catch (TCP::TcpException& exception) {
@@ -95,7 +99,11 @@ TermStatus LauncherClient::StopProcess(const std::string& bin_name,
 
     logger.Log("Trying to receive answer from server", Debug);
     int result;
-    implementation_->tcp_client_->Receive(result);
+    if (!implementation_->tcp_client_->Receive(
+            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
+      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
+                              implementation_->logger_);
+    }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return static_cast<TermStatus>(result);
   } catch (TCP::TcpException& exception) {
@@ -125,7 +133,11 @@ bool LauncherClient::ReRunProcess(const std::string& bin_name,
 
     logger.Log("Trying to receive answer from server", Debug);
     bool result;
-    implementation_->tcp_client_->Receive(result);
+    if (!implementation_->tcp_client_->Receive(
+            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
+      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
+                              implementation_->logger_);
+    }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return result;
   } catch (TCP::TcpException& exception) {
@@ -154,7 +166,11 @@ bool LauncherClient::IsProcessRunning(const std::string& bin_name) {
 
     logger.Log("Trying to receive answer from server", Debug);
     bool result;
-    implementation_->tcp_client_->Receive(result);
+    if (!implementation_->tcp_client_->Receive(
+            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
+      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
+                              implementation_->logger_);
+    }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return result;
   } catch (TCP::TcpException& exception) {
@@ -183,7 +199,11 @@ std::optional<int> LauncherClient::GetProcessPid(const std::string& bin_name) {
 
     logger.Log("Trying to receive answer from server", Debug);
     int result;
-    implementation_->tcp_client_->Receive(result);
+    if (!implementation_->tcp_client_->Receive(
+            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
+      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
+                              implementation_->logger_);
+    }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     if (result == 0) {
       return {};
@@ -206,7 +226,7 @@ void LauncherClient::Implementation::CheckTcpClient() {
   if (tcp_client_ == nullptr) {
     try {
       logger.Log("Tcp-connection is not active. Trying to connect", Debug);
-      tcp_client_ = new TCP::TcpClient(0, port_, "127.0.0.1", logger_);
+      tcp_client_ = new TCP::TcpClient("127.0.0.1", port_, logger_);
     } catch (TCP::TcpException& tcp_exception) {
       logger.Log(std::string("Tcp-connection cannot be established: ") +
                      tcp_exception.what(),
