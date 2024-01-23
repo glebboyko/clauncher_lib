@@ -11,7 +11,6 @@
 namespace LNCR {
 
 /*-------------------------------- constants ---------------------------------*/
-const int kMaxQueue = 1024;
 const std::chrono::milliseconds kWaitToRerun = std::chrono::milliseconds(100);
 const std::chrono::milliseconds kLoopWait = std::chrono::milliseconds(100);
 
@@ -471,12 +470,12 @@ LauncherServer::LauncherServer(int port, const std::string& config_file,
   logger.Log("Creating launcher server", Info);
 
   logger.Log("Init implementation var. Creating tcp-server", Debug);
-  implementation_ = std::unique_ptr<Implementation>(new Implementation{
-      .tcp_server_ = TCP::TcpServer(0, port, logging_f, kMaxQueue),
-      .agent_binary_ = agent_binary,
-      .config_file_ = config_file,
-      .port_ = port,
-      .logger_ = logging_f});
+  implementation_ = std::unique_ptr<Implementation>(
+      new Implementation{.tcp_server_ = TCP::TcpServer(port, logging_f),
+                         .agent_binary_ = agent_binary,
+                         .config_file_ = config_file,
+                         .port_ = port,
+                         .logger_ = logging_f});
   logger.Log(
       "TCP-server created. Implementation var inited. Getting load config",
       Debug);
@@ -565,7 +564,7 @@ LauncherServer::~LauncherServer() {
     if (connection.has_value()) {
       logger.Log("Client is running, closing connection", Debug);
       try {
-        connection.value().CloseConnection();
+        connection.value().StopClient();
       } catch (std::exception& exception) {
         logger.Log("Multithreading tcp connection error", Warning);
       }
@@ -701,7 +700,9 @@ void LauncherServer::Implementation::Accepter() noexcept {
       int send_from;
       try {
         logger.Log("Trying to receive client status", Debug);
-        connection->Receive(send_from);
+        if (!connection->Receive(connection->GetMsPingThreshold(), send_from)) {
+          throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+        }
         logger.Log("Status received: " +
                        std::string(send_from == SenderStatus::Client ? "Client"
                                                                      : "Agent"),
@@ -724,7 +725,11 @@ void LauncherServer::Implementation::Accepter() noexcept {
           std::string process_name;
           int pid;
           int error;
-          connection->Receive(process_name, pid, error);
+          if (!connection->Receive(connection->GetMsPingThreshold(),
+                                   process_name, pid, error)) {
+            throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
+                                    logger_);
+          }
           logger.Log("Config received", Debug);
 
           // block tables to use
@@ -768,13 +773,8 @@ void LauncherServer::Implementation::Accepter() noexcept {
           logger.Log("Unlocked run mutex", Debug);
         }
       } catch (TCP::TcpException& tcp_exception) {
-        if (tcp_exception.GetType() != TCP::TcpException::ConnectionBreak) {
-          connection->CloseConnection();
-          logger.Log("Client broke connection. Connection deleted", Warning);
-        } else {
-          logger.Log("TCP error occurred: " + std::string(tcp_exception.what()),
-                     Warning);
-        }
+        logger.Log("TCP error occurred: " + std::string(tcp_exception.what()),
+                   Warning);
       }
       delete connection;
     };
@@ -785,8 +785,7 @@ void LauncherServer::Implementation::Accepter() noexcept {
       logger.Log("Init receiver thread created", Debug);
     } catch (std::system_error& error) {
       logger.Log("Error occurred while creating thread", Warning);
-      logger.Log("Closing connection", Debug);
-      connection->CloseConnection();
+      logger.Log("Deleting connection", Debug);
       delete connection;
     }
   }
@@ -886,7 +885,10 @@ void LauncherServer::Implementation::ClientCommunication(
   try {
     logger.Log("Trying to receive command", Debug);
     int command;
-    (*client)->connection->Receive(command);
+    if (!(*client)->connection->Receive(
+            (*client)->connection->GetMsPingThreshold(), command)) {
+      throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+    }
     logger.Log("Command received: " + std::to_string(command), Info);
     (this->*method_ptr[command])((*client)->connection.value());
   } catch (TCP::TcpException& tcp_exception) {
@@ -916,11 +918,17 @@ void LauncherServer::Implementation::ALoad(TCP::TcpClient& client) {
   int num_of_args;
   int tmp_time_to_stop;
   bool should_wait;
-  client.Receive(bin_name, num_of_args, config.launch_on_boot,
-                 config.term_rerun, tmp_time_to_stop, should_wait);
+  if (!client.Receive(client.GetMsPingThreshold(), bin_name, num_of_args,
+                      config.launch_on_boot, config.term_rerun,
+                      tmp_time_to_stop, should_wait)) {
+    throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+  }
   for (int i = 0; i < num_of_args; ++i) {
     std::string arg;
-    client.Receive(arg);
+    if (!client.Receive(client.GetMsPingThreshold(), arg)) {
+      throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+    }
+
     config.args.push_back(arg);
   }
   logger.Log("Config received", Debug);
@@ -944,7 +952,9 @@ void LauncherServer::Implementation::AStop(TCP::TcpClient& client) {
   logger.Log("Receiving process config", Debug);
   std::string bin_name;
   bool should_wait;
-  client.Receive(bin_name, should_wait);
+  if (!client.Receive(client.GetMsPingThreshold(), bin_name, should_wait)) {
+    throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+  }
 
   logger.Log("Config received. Terminating process", Debug);
   int result = StopProcess(bin_name, should_wait);
@@ -962,7 +972,9 @@ void LauncherServer::Implementation::ARerun(TCP::TcpClient& client) {
   logger.Log("Receiving process config", Debug);
   std::string bin_name;
   bool should_wait;
-  client.Receive(bin_name, should_wait);
+  if (!client.Receive(client.GetMsPingThreshold(), bin_name, should_wait)) {
+    throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+  }
 
   logger.Log("Config received. Terminating process. Locking mutex", Debug);
   pr_main_m_.lock();
@@ -999,7 +1011,9 @@ void LauncherServer::Implementation::AIsRunning(TCP::TcpClient& client) {
 
   logger.Log("Receiving process name", Debug);
   std::string bin_name;
-  client.Receive(bin_name);
+  if (!client.Receive(client.GetMsPingThreshold(), bin_name)) {
+    throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+  }
   logger.Log("Process name received. Getting PID", Debug);
 
   bool result = IsRunning(bin_name);
@@ -1015,7 +1029,9 @@ void LauncherServer::Implementation::AGetPid(TCP::TcpClient& client) {
 
   logger.Log("Receiving process name", Debug);
   std::string bin_name;
-  client.Receive(bin_name);
+  if (!client.Receive(client.GetMsPingThreshold(), bin_name)) {
+    throw TCP::TcpException(TCP::TcpException::ConnectionBreak, logger_);
+  }
   logger.Log("Process name received. Getting PID", Debug);
 
   auto result = GetPid(bin_name);
