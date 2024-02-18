@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <string>
 
 #include "clauncher-supply.hpp"
 #include "tcp-client.hpp"
@@ -13,8 +14,8 @@ int main(const int argc, char** argv) {
 
   try {
     TCP::TcpClient tcp_client("127.0.0.1", port);
-    tcp_client.Send(LNCR::Agent);
-    tcp_client.Send(argv[2], getpid(), 0);
+    tcp_client.Send(static_cast<int>(LNCR::Agent));
+    tcp_client.Send(std::string(argv[2]), getpid(), 0);
 
     bool should_run;
     if (!tcp_client.Receive(tcp_client.GetMsPingThreshold(), should_run) ||
@@ -37,8 +38,8 @@ int main(const int argc, char** argv) {
 
   try {
     TCP::TcpClient tcp_client("127.0.0.1", 0);
-    tcp_client.Send(LNCR::Agent);
-    tcp_client.Send(argv[2], getpid(), errno);
+    tcp_client.Send(static_cast<int>(LNCR::Agent));
+    tcp_client.Send(std::string(argv[2]), getpid(), errno);
   } catch (...) {
     return 3;
   }

@@ -30,7 +30,7 @@ LauncherClient::LauncherClient(int port, LNCR::logging_foo logging_f) {
   logger.Log("Tcp-client created", Debug);
 
   logger.Log("Trying to send configuration to server", Debug);
-  implementation_->tcp_client_->Send(SenderStatus::Client);
+  implementation_->tcp_client_->Send(static_cast<int>(SenderStatus::Client));
   logger.Log("Configuration successfully sent. Client created", Debug);
 
   logger.Log("Client created", Info);
@@ -50,7 +50,7 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
 
   try {
     logger.Log("Trying to send command to server", Debug);
-    implementation_->tcp_client_->Send(Command::Load);
+    implementation_->tcp_client_->Send(static_cast<int>(Command::Load));
     implementation_->tcp_client_->Send(
         bin_name, process_config.args.size(), process_config.launch_on_boot,
         process_config.term_rerun,
@@ -93,7 +93,7 @@ TermStatus LauncherClient::StopProcess(const std::string& bin_name,
 
   try {
     logger.Log("Trying to send command to server", Debug);
-    implementation_->tcp_client_->Send(Command::Stop);
+    implementation_->tcp_client_->Send(static_cast<int>(Command::Stop));
     implementation_->tcp_client_->Send(bin_name, wait_for_stop);
     logger.Log("Command sent to server", Debug);
 
@@ -127,7 +127,7 @@ bool LauncherClient::ReRunProcess(const std::string& bin_name,
 
   try {
     logger.Log("Trying to send command to server", Debug);
-    implementation_->tcp_client_->Send(Command::Rerun);
+    implementation_->tcp_client_->Send(static_cast<int>(Command::Rerun));
     implementation_->tcp_client_->Send(bin_name, wait_for_rerun);
     logger.Log("Command send to server", Debug);
 
@@ -160,7 +160,7 @@ bool LauncherClient::IsProcessRunning(const std::string& bin_name) {
 
   try {
     logger.Log("Trying to send command to server", Debug);
-    implementation_->tcp_client_->Send(Command::IsRunning);
+    implementation_->tcp_client_->Send(static_cast<int>(Command::IsRunning));
     implementation_->tcp_client_->Send(bin_name);
     logger.Log("Command send to server", Debug);
 
@@ -193,7 +193,7 @@ std::optional<int> LauncherClient::GetProcessPid(const std::string& bin_name) {
 
   try {
     logger.Log("Trying to send command to server", Debug);
-    implementation_->tcp_client_->Send(Command::GetPid);
+    implementation_->tcp_client_->Send(static_cast<int>(Command::GetPid));
     implementation_->tcp_client_->Send(bin_name);
     logger.Log("Command send to server", Debug);
 
