@@ -4,7 +4,7 @@ libs_path="$1"
 
 # getting git libs
 git_libs=(c_tcp_lib)
-git_link="https://github.com/glebboyko"
+git_link="https://git.lafresa.ru/glebboiko"
 
 for lib in ${git_libs[*]}
 do
