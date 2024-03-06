@@ -6,12 +6,6 @@ set(CMAKE_CXX_FLAGS -pthread)
 
 set(LIB_DIR "${CMAKE_SOURCE_DIR}/libs")
 
-set(LIB_GETTER "${LIB_DIR}/lib_getter.sh")
-execute_process(COMMAND /bin/bash "${LIB_GETTER}" "${LIB_DIR}")
-
-set(LIB_BUILDER "${LIB_DIR}/lib_builder.sh")
-execute_process(COMMAND /bin/bash "${LIB_BUILDER}" "${LIB_DIR}/c_tcp_lib/cpp" "${LIB_DIR}/built" ".a")
-
 include_directories(include source)
 include_directories(clauncher_client_exec)
 
