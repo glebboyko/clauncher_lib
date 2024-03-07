@@ -22,5 +22,5 @@ dir_creator "${lib_dir}"
 for lib in "${req_libs[@]}"
 do
   (cd "${lib_dir}" || exit 1; git clone "${git_link}/${lib}")
-  (cd "${lib_dir}/${lib} || exit 1; /bin/bash "${lib_dir}/${lib}/${lib_getter}")
+  (cd "${lib_dir}/${lib}" || exit 1; /bin/bash "${lib_dir}/${lib}/${lib_getter}")
 done
