@@ -3,6 +3,7 @@
 #include <functional>
 #include <list>
 #include <string>
+#include <optional>
 
 namespace LNCR {
 
