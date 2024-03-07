@@ -13,7 +13,7 @@ function dir_creator {
 
 lib_dir="libs"
 
-git_link="https://git.lafresa.ru/glebboiko/"
+git_link="https://git.lafresa.ru/glebboiko"
 req_libs=("c_tcp_lib")
 lib_getter="cpp_lib_getter.sh"
 
@@ -21,7 +21,6 @@ dir_creator "${lib_dir}"
 
 for lib in "${req_libs[@]}"
 do
-  rm -rf "${lib_dir}/${lib}"
-  (cd "${lib_dir}/${lib}" || exit 1; git clone "${git_link}/${lib}")
-  /bin/bash "${lib_dir}/${lib}/${lib_getter}"
+  (cd "${lib_dir}" || exit 1; git clone "${git_link}/${lib}")
+  (cd "${lib_dir}/${lib} || exit 1; /bin/bash "${lib_dir}/${lib}/${lib_getter}")
 done
