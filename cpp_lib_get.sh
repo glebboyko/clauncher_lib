@@ -24,6 +24,6 @@ dir_creator "${final_dir}"
 for lib in "${req_libs[@]}"
 do
   rm -rf "${lib_dir}/${lib}"
-  git clone "${git_link}/${lib}" "${lib_dir}/${lib}"
+  (cd "${lib_dir}/${lib}" || exit 1; git clone "${git_link}/${lib}")
   /bin/bash "${lib_dir}/${lib}/${lib_getter}"
 done
