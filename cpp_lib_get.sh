@@ -17,9 +17,7 @@ git_link="https://git.lafresa.ru/glebboiko/"
 req_libs=("c_tcp_lib")
 lib_getter="cpp_lib_getter.sh"
 
-final_dir="${lib_dir}/built"
-
-dir_creator "${final_dir}"
+dir_creator "${lib_dir}"
 
 for lib in "${req_libs[@]}"
 do
