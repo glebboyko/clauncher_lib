@@ -13,7 +13,7 @@ function dir_creator {
 
 lib_dir="libs"
 
-git_link="https://git.lafresa.ru/glebboiko"
+git_link="https://github.com/glebboyko"
 req_libs=("c_tcp_lib")
 lib_getter="cpp_lib_getter.sh"
 
