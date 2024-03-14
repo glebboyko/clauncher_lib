@@ -65,10 +65,8 @@ bool LauncherClient::LoadProcess(const std::string& bin_name,
 
     logger.Log("Trying to receive answer from server", Debug);
     bool result;
-    if (!implementation_->tcp_client_->Receive(
-            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
-      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
-                              implementation_->logger_);
+    while (!implementation_->tcp_client_->Receive(
+        implementation_->tcp_client_->GetMsPingThreshold(), result)) {
     }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return result;
@@ -99,10 +97,8 @@ TermStatus LauncherClient::StopProcess(const std::string& bin_name,
 
     logger.Log("Trying to receive answer from server", Debug);
     int result;
-    if (!implementation_->tcp_client_->Receive(
-            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
-      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
-                              implementation_->logger_);
+    while (!implementation_->tcp_client_->Receive(
+        implementation_->tcp_client_->GetMsPingThreshold(), result)) {
     }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return static_cast<TermStatus>(result);
@@ -133,10 +129,8 @@ bool LauncherClient::ReRunProcess(const std::string& bin_name,
 
     logger.Log("Trying to receive answer from server", Debug);
     bool result;
-    if (!implementation_->tcp_client_->Receive(
-            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
-      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
-                              implementation_->logger_);
+    while (!implementation_->tcp_client_->Receive(
+        implementation_->tcp_client_->GetMsPingThreshold(), result)) {
     }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return result;
@@ -166,10 +160,8 @@ bool LauncherClient::IsProcessRunning(const std::string& bin_name) {
 
     logger.Log("Trying to receive answer from server", Debug);
     bool result;
-    if (!implementation_->tcp_client_->Receive(
-            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
-      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
-                              implementation_->logger_);
+    while (!implementation_->tcp_client_->Receive(
+        implementation_->tcp_client_->GetMsPingThreshold(), result)) {
     }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     return result;
@@ -199,10 +191,8 @@ std::optional<int> LauncherClient::GetProcessPid(const std::string& bin_name) {
 
     logger.Log("Trying to receive answer from server", Debug);
     int result;
-    if (!implementation_->tcp_client_->Receive(
-            implementation_->tcp_client_->GetMsPingThreshold(), result)) {
-      throw TCP::TcpException(TCP::TcpException::ConnectionBreak,
-                              implementation_->logger_);
+    while (!implementation_->tcp_client_->Receive(
+        implementation_->tcp_client_->GetMsPingThreshold(), result)) {
     }
     logger.Log("Answer from server received: " + std::to_string(result), Info);
     if (result == 0) {
